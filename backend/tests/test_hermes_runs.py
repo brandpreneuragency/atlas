@@ -148,6 +148,54 @@ async def test_sessions_returns_list():
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_sessions_unwraps_live_envelope():
+    # Live Hermes wraps the list: {"object": "list", "data": [...]}
+    respx.get("http://hermes:8642/api/sessions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "object": "list",
+                "data": [
+                    {
+                        "id": "20260701_071709_13bb4b",
+                        "source": "tui",
+                        "model": "gpt-5.5",
+                        "title": "VS Code Swarm Models Tools Refactor Pack #3",
+                        "message_count": 291,
+                    }
+                ],
+            },
+        )
+    )
+    sessions = await HermesClient("http://hermes:8642", "testkey").sessions()
+    assert len(sessions) == 1
+    assert sessions[0]["id"] == "20260701_071709_13bb4b"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_session_messages_unwraps_live_envelope():
+    respx.get("http://hermes:8642/api/sessions/sess-1/messages").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "object": "list",
+                "session_id": "sess-1",
+                "data": [
+                    {"role": "user", "content": "Reply PONG"},
+                    {"role": "assistant", "content": "PONG"},
+                ],
+            },
+        )
+    )
+    msgs = await HermesClient("http://hermes:8642", "testkey").session_messages(
+        "sess-1"
+    )
+    assert [m["role"] for m in msgs] == ["user", "assistant"]
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_sessions_passes_q_and_limit():
     route = respx.get(url__regex=r".*/api/sessions.*").mock(
         return_value=httpx.Response(200, json=[])

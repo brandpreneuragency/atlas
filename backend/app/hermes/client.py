@@ -36,6 +36,15 @@ def _parse_sse_frame(frame: str) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+def _unwrap_list(data: Any, what: str) -> list[dict[str, Any]]:
+    """Accept a bare JSON list or the live envelope ``{"object":"list","data":[...]}``."""
+    if isinstance(data, dict) and isinstance(data.get("data"), list):
+        data = data["data"]
+    if not isinstance(data, list):
+        raise HermesUnavailable(f"{what} returned non-list JSON")
+    return [item for item in data if isinstance(item, dict)]
+
+
 class HermesClient:
     """Adapter for the Hermes runs API (:8642), MASTER_PLAN §7.
 
@@ -157,12 +166,7 @@ class HermesClient:
             ) as client:
                 response = await client.get("/api/sessions", params=params)
                 response.raise_for_status()
-                data = response.json()
-                if not isinstance(data, list):
-                    raise HermesUnavailable(
-                        "sessions returned non-list JSON"
-                    )
-                return [item for item in data if isinstance(item, dict)]
+                return _unwrap_list(response.json(), "sessions")
         except httpx.HTTPError as exc:
             raise HermesUnavailable(str(exc)) from exc
 
@@ -174,12 +178,7 @@ class HermesClient:
             ) as client:
                 response = await client.get(f"/api/sessions/{sid}/messages")
                 response.raise_for_status()
-                data = response.json()
-                if not isinstance(data, list):
-                    raise HermesUnavailable(
-                        "session_messages returned non-list JSON"
-                    )
-                return [item for item in data if isinstance(item, dict)]
+                return _unwrap_list(response.json(), "session_messages")
         except httpx.HTTPError as exc:
             raise HermesUnavailable(str(exc)) from exc
 
