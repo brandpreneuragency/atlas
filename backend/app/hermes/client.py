@@ -36,6 +36,14 @@ def _parse_sse_frame(frame: str) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+def _sse_event_name(frame: str) -> str | None:
+    """Return the ``event:`` field of an SSE frame, or ``None`` if absent."""
+    for line in frame.split("\n"):
+        if line.startswith("event:"):
+            return line[len("event:"):].strip()
+    return None
+
+
 def _unwrap_list(data: Any, what: str) -> list[dict[str, Any]]:
     """Accept a bare JSON list or the live envelope ``{"object":"list","data":[...]}``."""
     if isinstance(data, dict) and isinstance(data.get("data"), list):
@@ -183,7 +191,11 @@ class HermesClient:
             raise HermesUnavailable(str(exc)) from exc
 
     async def create_session(self) -> str:
-        data = await self._request("POST", "/api/sessions")
+        # Live Hermes 400s on an empty body and nests the id under "session".
+        data = await self._request("POST", "/api/sessions", json={})
+        nested = data.get("session")
+        if isinstance(nested, dict):
+            data = nested
         sid = data.get("id")
         if not isinstance(sid, str):
             raise HermesUnavailable(f"create_session returned no id: {data!r}")
@@ -192,8 +204,10 @@ class HermesClient:
     async def chat_stream(self, sid: str, message: str) -> AsyncIterator[str]:
         """Stream text tokens from ``POST /api/sessions/{sid}/chat/stream``.
 
-        Hermes emits ``data: {"token": "<chunk>"}`` lines and a terminating
-        ``data: [DONE]`` sentinel. Only parsed token text is yielded.
+        Live Hermes emits named SSE events; tokens arrive as
+        ``event: assistant.delta`` / ``data: {"delta": "<chunk>"}``, the stream
+        ends with ``event: done``, and ``event: error`` carries a message.
+        The legacy ``data: {"token": "<chunk>"}`` shape is still accepted.
         """
         headers = {"Authorization": f"Bearer {self.api_key}"}
         url = f"{self.base_url}/api/sessions/{sid}/chat/stream"
@@ -208,11 +222,26 @@ class HermesClient:
                         buffer += chunk
                         while "\n\n" in buffer:
                             frame, buffer = buffer.split("\n\n", 1)
+                            name = _sse_event_name(frame)
                             payload = _parse_sse_frame(frame)
+                            if name == "done":
+                                return
+                            if name == "error":
+                                detail = "chat stream error"
+                                if payload is not None and isinstance(
+                                    payload.get("message"), str
+                                ):
+                                    detail = payload["message"]
+                                raise HermesUnavailable(detail)
                             if payload is None:
                                 continue
-                            token = payload.get("token")
-                            if isinstance(token, str):
-                                yield token
+                            if name == "assistant.delta":
+                                delta = payload.get("delta")
+                                if isinstance(delta, str):
+                                    yield delta
+                            elif name is None:
+                                token = payload.get("token")
+                                if isinstance(token, str):
+                                    yield token
         except httpx.HTTPError as exc:
             raise HermesUnavailable(str(exc)) from exc

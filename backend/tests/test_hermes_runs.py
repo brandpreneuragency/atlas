@@ -8,6 +8,7 @@ import respx
 
 from app.engine.mock import MockHermes
 from app.hermes.client import HermesClient
+from app.hermes.schemas import HermesUnavailable
 
 
 def _fixture() -> dict:
@@ -236,6 +237,24 @@ async def test_create_session_returns_id():
     assert sid == "sess-new"
 
 
+@pytest.mark.asyncio
+@respx.mock
+async def test_create_session_live_shape():
+    # Live Hermes: requires a JSON body and nests the id under "session".
+    route = respx.post("http://hermes:8642/api/sessions").mock(
+        return_value=httpx.Response(
+            201,
+            json={
+                "object": "hermes.session",
+                "session": {"id": "api_1783314642_297e0408", "source": "api_server"},
+            },
+        )
+    )
+    sid = await HermesClient("http://hermes:8642", "testkey").create_session()
+    assert sid == "api_1783314642_297e0408"
+    assert route.calls.last.request.content == b"{}"
+
+
 # --- chat_stream -----------------------------------------------------------
 
 
@@ -268,6 +287,61 @@ async def test_chat_stream_yields_text_chunks():
     # request body carries the message
     body = json.loads(respx.calls.last.request.content)
     assert body == {"message": "Reply PONG"}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_chat_stream_yields_live_assistant_deltas():
+    # Live Hermes emits named SSE events; only assistant.delta carries tokens.
+    sse = (
+        'event: run.started\n'
+        'data: {"user_message":{"role":"user","content":"Reply PONG"},"session_id":"s","run_id":"r","seq":1,"ts":1.0}\n\n'
+        'event: message.started\n'
+        'data: {"message":{"id":"msg_1","role":"assistant"},"seq":2,"ts":1.0}\n\n'
+        'event: tool.progress\n'
+        'data: {"message_id":"msg_1","tool_name":"_thinking","delta":"NOT-A-TOKEN","seq":3,"ts":1.0}\n\n'
+        'event: assistant.delta\n'
+        'data: {"message_id":"msg_1","delta":"PO","seq":4,"ts":1.0}\n\n'
+        'event: assistant.delta\n'
+        'data: {"message_id":"msg_1","delta":"NG","seq":5,"ts":1.0}\n\n'
+        'event: assistant.completed\n'
+        'data: {"message_id":"msg_1","content":"PONG","completed":true,"seq":6,"ts":1.0}\n\n'
+        'event: done\n'
+        'data: {"session_id":"s","run_id":"r","seq":7,"ts":1.0}\n\n'
+    )
+    respx.post("http://hermes:8642/api/sessions/sess-1/chat/stream").mock(
+        return_value=httpx.Response(
+            200, headers={"content-type": "text/event-stream"}, content=sse
+        )
+    )
+    chunks = [
+        c
+        async for c in HermesClient("http://hermes:8642", "testkey").chat_stream(
+            "sess-1", "Reply PONG"
+        )
+    ]
+    assert chunks == ["PO", "NG"]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_chat_stream_raises_on_error_event():
+    sse = (
+        'event: error\n'
+        'data: {"message":"No access token found","seq":1,"ts":1.0}\n\n'
+        'event: done\n'
+        'data: {"seq":2,"ts":1.0}\n\n'
+    )
+    respx.post("http://hermes:8642/api/sessions/sess-1/chat/stream").mock(
+        return_value=httpx.Response(
+            200, headers={"content-type": "text/event-stream"}, content=sse
+        )
+    )
+    with pytest.raises(HermesUnavailable, match="No access token"):
+        async for _ in HermesClient("http://hermes:8642", "testkey").chat_stream(
+            "sess-1", "hi"
+        ):
+            pass
 
 
 # --- MockHermes mirrors HermesClient interface ----------------------------
