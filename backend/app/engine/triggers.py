@@ -148,10 +148,10 @@ class TriggerService:
             existing = self._debounce.pop(key, None)
             if existing is not None:
                 existing.cancel()  # stability window resets on every change
-            self._debounce[key] = loop.call_later(
-                stability_s,
-                lambda k=key: asyncio.ensure_future(self._fire_file(*k)),
-            )
+            def _schedule(k: tuple[int, str] = key) -> None:
+                asyncio.ensure_future(self._fire_file(*k))
+
+            self._debounce[key] = loop.call_later(stability_s, _schedule)
 
     async def _fire_file(self, workflow_id: int, rel: str) -> None:
         self._debounce.pop((workflow_id, rel), None)
