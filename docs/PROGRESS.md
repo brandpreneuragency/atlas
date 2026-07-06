@@ -4,7 +4,7 @@
 > Resume command: **"Read CLAUDE.md, docs/PROGRESS.md, and docs/MASTER_PLAN.md. Continue with the next phase. Run acceptance criteria when done."**
 
 ## Current
-Phase 6 — tasks 6.1–6.4 complete, 6.5 migration proof in progress (Scout v2 live run pending).
+Phase 6 — COMPLETE (deployed + migration proof 2026-07-06). Next: Phase 7.
 
 ## Done
 - [x] Planning: design spec + master plan + phases 0–8 + execution playbook written and approved (2026-07-06).
@@ -49,6 +49,9 @@ Phase 6 — tasks 6.1–6.4 complete, 6.5 migration proof in progress (Scout v2 
 - [x] Task 6.3 — run panel + live states + run detail (commit 33c2f82): backend step events now carry `node_id`/`status` payloads; `flow/runStates.ts` (`applyRunEvent` reducer: step_started→running, step_finished→succeeded/failed, waiting_approval→waiting), `flow/RunPanel.tsx` (Run/Dry-run POST with flag, recent-run list with status chip/duration/cost, links to RunDetail), editor subscribes to `/api/events/stream` filtered by workflow id → node badges light live + pulsing while running; `pages/RunDetail.tsx` (step list w/ collapsible input/output JSON, error text, inline Approve/Reject → `/api/approvals/{id}/resolve`). Tests: runpanel (5).
 - [x] Task 6.4 — automation page + versions (commit ae1ecec): Workflows table (name→editor link, enabled toggle → POST enable, last-run status chip, cron schedule described, runs today, cost today), "New workflow" (creates lone `trigger.manual` graph → navigates to editor); `flow/VersionsDrawer.tsx` (versions w/ timestamps, confirm → POST rollback → editor reloads graph/version). Frontend suite: 53 tests + tsc + eslint + build green.
 - [x] Fix during 6.5: mutating workflow routes (`enable/update/delete/rollback`) now call `TriggerService.sync()` (commit 28749ca) — previously cron jobs only registered at boot, so enabling a cron workflow at runtime never scheduled it.
+- [x] Task 6.5 — migration proof + deploy (2026-07-06, evidence via curl per plan): deployed commit 28749ca; Hermes-native "App Store Market Scout" **paused** (kept, not deleted); **"App Store Scout v2"** created (wf 1) with `trigger.cron 0 8 * * *` → `hermes.task` (the live scout prompt pulled from the Hermes job, 490 chars) → `file.op write 04_reports/appstore/{{trigger.fired_at}}.md` → `notify.telegram` placeholder; enabled (runtime sync registered the daily job). **Dry-run** (run 1) succeeded — write went to `/data/dryrun/...`, ATLAS untouched. **Real run** (run 2, manual with `fired_at` payload) succeeded: hermes run `run_5f372ce4...`, 3,959,490/9,064 tokens (≈$3.97 at the $1/M approximation — the scout does heavy tool use; budget caps recommended), report `04_reports/appstore/2026-07-06T10-26-01.md` (2,299 bytes of real scout output), all 4 steps in run detail, feed streamed step_started/finished → run.finished live. Federated view shows BOTH: paused Hermes job + enabled v2 workflow (coexistence proven). Temp files cleaned.
+
+**Phase 6 acceptance criteria (2026-07-06): ALL PASS** — (1) workflow buildable in UI (palette → connect → configure → save; versions + rollback tested); (2) live node states from SSE, failures red with error one click away, dry-run touches nothing; (3) Scout v2 exists, ran real once, output in `04_reports/appstore/`; (4) backend 168 tests + ruff + mypy + noexec, frontend 53 tests + tsc + eslint + build all green; PROGRESS updated.
 
 ## Phase-0 records (CAPTURED — later phases depend on these)
 - **Run POST payload:** `POST /v1/runs {"input": "<prompt>"}` → 202 `{"run_id":"run_<hex>","status":"started"}`. (`input` required; may be message-list.)
