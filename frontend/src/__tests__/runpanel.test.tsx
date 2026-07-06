@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AtlasEvent, WorkflowRun } from '../api/types'
 import { RunPanel } from '../components/flow/RunPanel'
 import { applyRunEvent } from '../components/flow/runStates'
+import type { RunNodeStates } from '../components/flow/runStates'
 import { RunDetail } from '../pages/RunDetail'
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -51,7 +52,7 @@ afterEach(() => {
 
 describe('applyRunEvent', () => {
   it('transitions node states from SSE step events', () => {
-    let states: Record<string, string> = {}
+    let states: RunNodeStates = {}
     states = applyRunEvent(states, makeEvent('run.step_started', { node_id: 'h' }))
     expect(states.h).toBe('running')
     states = applyRunEvent(

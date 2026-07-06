@@ -12,6 +12,7 @@ import { RunPanel } from '../components/flow/RunPanel'
 import { applyRunEvent } from '../components/flow/runStates'
 import type { RunNodeStates } from '../components/flow/runStates'
 import { useGraph } from '../components/flow/useGraph'
+import { VersionsDrawer } from '../components/flow/VersionsDrawer'
 import { openAtlasSse } from '../lib/sse'
 
 function EditorInner({ workflow }: { workflow: Workflow }) {
@@ -22,6 +23,7 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
   const [selected, setSelected] = useState<string | null>(null)
   const [shellAllowlist, setShellAllowlist] = useState<string[]>([])
   const [runStates, setRunStates] = useState<RunNodeStates>({})
+  const [showVersions, setShowVersions] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const navigate = useNavigate()
 
@@ -132,7 +134,14 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
         )}
         <button
           type="button"
-          className="ml-auto rounded-lg bg-cyan-500 px-4 py-1.5 text-sm font-medium text-slate-950"
+          className="ml-auto rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300"
+          onClick={() => setShowVersions((v) => !v)}
+        >
+          Versions
+        </button>
+        <button
+          type="button"
+          className="rounded-lg bg-cyan-500 px-4 py-1.5 text-sm font-medium text-slate-950"
           onClick={() => void save()}
         >
           Save
@@ -164,6 +173,19 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
             shellAllowlist={shellAllowlist}
             onChange={graph.updateNodeConfig}
             onClose={() => setSelected(null)}
+          />
+        )}
+        {showVersions && (
+          <VersionsDrawer
+            workflowId={workflow.id}
+            currentVersion={version}
+            onRollback={(rolled) => {
+              graph.setGraph(rolled.graph)
+              setVersion(rolled.version)
+              setName(rolled.name)
+              setShowVersions(false)
+            }}
+            onClose={() => setShowVersions(false)}
           />
         )}
         <RunPanel workflowId={workflow.id} refreshKey={refreshKey} />
