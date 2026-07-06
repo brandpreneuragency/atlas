@@ -90,5 +90,7 @@ Phase 6 — COMPLETE (deployed + migration proof 2026-07-06). Next: Phase 7.
 - 2026-07-06: Webhook + manual-run routes live in `routers/workflows.py` (`hooks_router` without session auth); Task 5.4 lists no router file, this was the least-new-files placement.
 - 2026-07-06: **Scout v2 real run cost ≈$3.97** (3,959,490 input / 9,064 output tokens at the $1/M approximation) — the live scout prompt does heavy tool use, far above the smoke-test scale. `App Store Scout v2` was left in PROGRESS without a `budget_usd_per_run` cap; recommend setting one (or `max_runs_per_hour`) before its daily 08:00 cron fires, since the engine's budget guard only stops a run already in progress once cost is added per step, not before it starts.
 
+- 2026-07-06: User removed "App Store Scout v2" (workflow id 1) after the Phase 6 migration proof, citing its ~$3.97/run cost. `DELETE /api/workflows/1` → 204, cascade clean, `TriggerService.sync()` unregistered its cron job. The Hermes-native "App Store Market Scout" job remains **paused** — no app-store scouting automation is currently running (neither the Hermes job nor a workflow).
+
 ## DECISION NEEDED
-- Should `budget_usd_per_run` be set on "App Store Scout v2" (workflow id 1, live) before its first scheduled fire? Recommend capping it given the ~$3.97 observed cost per run; awaiting user confirmation on a limit before Phase 7 work touches notifications/budgets further.
+- No automation currently covers app-store scouting (Scout v2 deleted; Hermes-native job still paused from the migration proof). Resume the Hermes-native job, rebuild a budget-capped workflow version, or leave both off? Awaiting user direction.
