@@ -11,7 +11,7 @@ from app.db import init_db
 from app.engine.engine import Engine
 from app.engine.triggers import TriggerService
 from app.hermes.factory import make_hermes_client
-from app.routers import agents, approvals, events, files, hermes, system, workflows
+from app.routers import agents, approvals, events, files, hermes, review, system, workflows
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -51,6 +51,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(workflows.router)
     app.include_router(workflows.hooks_router)
     app.include_router(approvals.router)
+    app.include_router(review.router)
 
     static_dir = resolved_settings.static_dir
     if static_dir is not None and Path(static_dir).exists():
