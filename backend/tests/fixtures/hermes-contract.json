@@ -1,0 +1,68 @@
+{
+  "_note": "Raw live captures 2026-07-06 for backend/tests/fixtures/. Sanitized: no API keys; dashboard token replaced with FAKE. Move into backend/tests/fixtures/ during Task 0.5.",
+  "capabilities": {
+    "object": "hermes.api_server.capabilities",
+    "platform": "hermes-agent",
+    "model": "hermes-agent",
+    "auth": {"type": "bearer", "required": true},
+    "runtime": {"mode": "server_agent", "tool_execution": "server", "split_runtime": false},
+    "features": {
+      "chat_completions": true, "chat_completions_streaming": true,
+      "responses_api": true, "responses_streaming": true,
+      "run_submission": true, "run_status": true, "run_events_sse": true,
+      "run_stop": true, "run_approval_response": true,
+      "tool_progress_events": true, "approval_events": true,
+      "session_resources": true, "session_chat": true, "session_chat_streaming": true,
+      "session_fork": true, "admin_config_rw": false, "jobs_admin": false,
+      "memory_write_api": false, "skills_api": true, "audio_api": false,
+      "realtime_voice": false, "cors": false,
+      "session_continuity_header": "X-Hermes-Session-Id",
+      "session_key_header": "X-Hermes-Session-Key"
+    }
+  },
+  "health_detailed": {
+    "status": "ok", "platform": "hermes-agent", "gateway_state": "running",
+    "platforms": {"api_server": {"state": "connected", "error_code": null, "error_message": null}},
+    "active_agents": 0, "pid": 6
+  },
+  "status_9119_public": {
+    "version": "0.16.0", "release_date": "2026.6.5", "config_version": 27,
+    "gateway_running": true, "gateway_state": "running",
+    "gateway_platforms": {"api_server": {"state": "connected"}},
+    "active_sessions": 0, "auth_required": false, "auth_providers": ["basic"]
+  },
+  "dashboard_index_token_html": "<script>window.__HERMES_SESSION_TOKEN__=\"<REDACTED_TOKEN>\";window._boot()</script>",
+  "run_status_completed_example": {
+    "object": "hermes.run", "run_id": "run_deadbeef", "status": "completed",
+    "created_at": 1783300000, "updated_at": 1783300012, "last_event": "run.completed",
+    "output": "PONG", "usage": {"input_tokens": 120, "output_tokens": 3, "total_tokens": 123}
+  },
+  "run_events_sse_sample": [
+    "data: {\"event\":\"tool.started\",\"run_id\":\"run_deadbeef\",\"timestamp\":1783300001,\"tool\":\"web_search\",\"preview\":\"query...\"}",
+    "data: {\"event\":\"tool.completed\",\"run_id\":\"run_deadbeef\",\"timestamp\":1783300004,\"tool\":\"web_search\",\"duration\":2.9,\"error\":false}",
+    "data: {\"event\":\"reasoning.available\",\"run_id\":\"run_deadbeef\",\"timestamp\":1783300006,\"text\":\"...\"}",
+    "data: {\"event\":\"run.completed\",\"run_id\":\"run_deadbeef\",\"timestamp\":1783300012,\"output\":\"PONG\",\"usage\":{\"input_tokens\":120,\"output_tokens\":3,\"total_tokens\":123}}",
+    ": stream closed"
+  ],
+  "cron_jobs_list_example": [
+    {"id": "ae1df3bdd2c5", "name": "App Store Market Scout",
+     "schedule": {"kind": "cron", "expr": "*/30 * * * *", "display": "*/30 * * * *"},
+     "enabled": false, "state": "paused", "last_status": "error",
+     "last_error": "RuntimeError: HTTP 429: The usage limit has been reached",
+     "next_run_at": "2026-07-01T03:30:00+00:00"}
+  ],
+  "env_masked_example": {
+    "OPENROUTER_API_KEY": {"is_set": true, "redacted_value": "sk-o...61b8", "description": "OpenRouter API key", "url": "https://openrouter.ai/keys", "category": "provider", "is_password": true, "tools": ["vision_analyze", "mixture_of_agents"], "advanced": false, "channel_managed": false},
+    "NOUS_BASE_URL": {"is_set": false, "redacted_value": null, "description": "Nous Portal base URL override", "url": null, "category": "provider", "is_password": false, "tools": [], "advanced": true, "channel_managed": false}
+  },
+  "model_info_example": {
+    "model": "gpt-5.5", "provider": "openai-codex",
+    "auto_context_length": 272000, "effective_context_length": 272000,
+    "capabilities": {"supports_tools": true, "supports_vision": true, "supports_reasoning": true, "context_window": 1050000, "max_output_tokens": 128000, "model_family": "gpt"}
+  },
+  "analytics_usage_example": {
+    "daily": [
+      {"day": "2026-06-06", "input_tokens": 1067406, "output_tokens": 30708, "cache_read_tokens": 2218852, "reasoning_tokens": 0, "estimated_cost": 0.0, "actual_cost": 0, "sessions": 47, "api_calls": 86}
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+captures/
+.env*
+devdata/
+node_modules/
+dist/
+__pycache__/
+*.db*
+.venv/
