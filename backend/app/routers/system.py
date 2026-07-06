@@ -56,6 +56,60 @@ async def put_model_prefs(prefs: ModelPrefs) -> ModelPrefs:
     return prefs
 
 
+class NotificationSettingsIn(BaseModel):
+    telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None
+    smtp_url: str | None = None
+    smtp_to: str | None = None
+
+
+_NOTIFY_KEYS = ("telegram_bot_token", "telegram_chat_id", "smtp_url", "smtp_to")
+
+
+async def _notify_settings() -> dict[str, str | None]:
+    return {key: await _setting(key) for key in _NOTIFY_KEYS}
+
+
+def _notify_view(values: dict[str, str | None]) -> dict[str, object]:
+    # secrets are never echoed back — only whether they are set
+    return {
+        "telegram_bot_token_set": bool(values["telegram_bot_token"]),
+        "telegram_chat_id": values["telegram_chat_id"] or "",
+        "smtp_url_set": bool(values["smtp_url"]),
+        "smtp_to": values["smtp_to"] or "",
+    }
+
+
+@router.get("/settings/notifications", dependencies=[Depends(require_session)])
+async def get_notifications() -> dict[str, object]:
+    return _notify_view(await _notify_settings())
+
+
+@router.put("/settings/notifications", dependencies=[Depends(require_session)])
+async def put_notifications(body: NotificationSettingsIn) -> dict[str, object]:
+    from app.notify import telegram as telegram_notify
+
+    for key, value in body.model_dump(exclude_none=True).items():
+        await _set_setting(key, value)
+    telegram_notify.reset_warning()
+    return _notify_view(await _notify_settings())
+
+
+@router.post(
+    "/settings/notifications/test", dependencies=[Depends(require_session)]
+)
+async def test_notifications() -> dict[str, bool]:
+    from app.notify import email as email_notify
+    from app.notify import telegram as telegram_notify
+
+    return {
+        "telegram": await telegram_notify.send("ATLAS Control test message"),
+        "email": await email_notify.send(
+            "ATLAS Control", "ATLAS Control test message"
+        ),
+    }
+
+
 async def _paused() -> bool:
     async with get_session() as session:
         value = (
