@@ -4,7 +4,7 @@
 > Resume command: **"Read CLAUDE.md, docs/PROGRESS.md, and docs/MASTER_PLAN.md. Continue with the next phase. Run acceptance criteria when done."**
 
 ## Current
-Phase 1 — IN PROGRESS (Tasks 1.1–1.3 complete; Task 1.4 next).
+Phase 1 — IN PROGRESS (Tasks 1.1–1.4 complete; Task 1.5 next).
 
 ## Done
 - [x] Planning: design spec + master plan + phases 0–8 + execution playbook written and approved (2026-07-06).
@@ -16,6 +16,7 @@ Phase 1 — IN PROGRESS (Tasks 1.1–1.3 complete; Task 1.4 next).
 - [x] Task 1.1 — Settings + DB core: `Settings`, SQLite async engine/session, WAL/foreign-key pragmas, migration runner, and `001_core.sql` implemented. Checks: `uv run ruff check .`, `uv run mypy app`, `uv run pytest -q` all pass.
 - [x] Task 1.2 — Auth/session/CSRF/rate-limit/system routes implemented: first-boot password hashing, login/logout, signed `atlas_session` cookie, API auth middleware, CSRF middleware, public `/api/health`, `/api/me`, and killswitch settings. Checks: `uv run ruff check .`, `uv run mypy app`, `uv run pytest -q` all pass.
 - [x] Task 1.3 — `HermesClient.health()` and `capabilities()` implemented with bearer auth, 10s default timeout, `HermesUnavailable` translation, and `/api/health` real-mode degradation. Checks: `uv run ruff check .`, `uv run mypy app`, `uv run pytest -q` all pass.
+- [x] Task 1.4 — `/hermes/{path}` authenticated reverse-proxy stopgap implemented for HTTP methods with hop-by-hop header stripping and websocket 501 limitation. Checks: `uv run ruff check .`, `uv run mypy app`, `uv run pytest -q` all pass.
 
 ## Phase-0 records (CAPTURED — later phases depend on these)
 - **Run POST payload:** `POST /v1/runs {"input": "<prompt>"}` → 202 `{"run_id":"run_<hex>","status":"started"}`. (`input` required; may be message-list.)
