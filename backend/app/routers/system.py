@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -12,6 +14,46 @@ router = APIRouter(prefix="/api")
 
 class KillSwitchRequest(BaseModel):
     paused: bool
+
+
+class ModelPrefs(BaseModel):
+    favorites: list[str]
+    hidden: list[str]
+
+
+async def _setting(key: str) -> str | None:
+    async with get_session() as session:
+        return (
+            await session.execute(
+                text("SELECT value FROM settings WHERE key = :key"), {"key": key}
+            )
+        ).scalar_one_or_none()
+
+
+async def _set_setting(key: str, value: str) -> None:
+    async with get_session() as session:
+        await session.execute(
+            text(
+                "INSERT INTO settings(key, value) VALUES (:key, :value) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+            ),
+            {"key": key, "value": value},
+        )
+        await session.commit()
+
+
+@router.get("/settings/model-prefs", dependencies=[Depends(require_session)])
+async def get_model_prefs() -> ModelPrefs:
+    raw = await _setting("model_prefs")
+    if raw is None:
+        return ModelPrefs(favorites=[], hidden=[])
+    return ModelPrefs.model_validate_json(raw)
+
+
+@router.put("/settings/model-prefs", dependencies=[Depends(require_session)])
+async def put_model_prefs(prefs: ModelPrefs) -> ModelPrefs:
+    await _set_setting("model_prefs", json.dumps(prefs.model_dump()))
+    return prefs
 
 
 async def _paused() -> bool:

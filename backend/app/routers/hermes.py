@@ -207,6 +207,108 @@ async def cron_delete(request: Request, job_id: str) -> None:
     )
 
 
+# ---- Models / env / analytics / logs (proxied to HermesAdmin) ------------
+
+
+class ModelSetBody(BaseModel):
+    model: str
+    provider: str
+
+
+class EnvPutBody(BaseModel):
+    key: str
+    value: str
+
+
+def _admin_502(exc: HermesUnavailable) -> HTTPException:
+    return HTTPException(status_code=502, detail=str(exc))
+
+
+@router.get("/api/hermes/model", dependencies=[Depends(require_session)])
+async def model_get(request: Request) -> dict[str, Any]:
+    admin = get_hermes_admin(request)
+    try:
+        info = await admin.model_info()
+        options = await admin.model_options()
+    except HermesUnavailable as exc:
+        await append_event("hermes.error", "model", f"model fetch failed: {exc}")
+        raise _admin_502(exc) from exc
+    return {"current": info, "options": options}
+
+
+@router.post("/api/hermes/model", dependencies=[Depends(require_session)])
+async def model_set(request: Request, body: ModelSetBody) -> dict[str, Any]:
+    try:
+        result = await get_hermes_admin(request).model_set(body.model, body.provider)
+    except HermesUnavailable as exc:
+        await append_event("hermes.error", "model", f"model set failed: {exc}")
+        raise _admin_502(exc) from exc
+    await append_event(
+        "hermes.cron_changed",
+        "model",
+        f"switched model to {body.model} ({body.provider})",
+    )
+    return result
+
+
+@router.get("/api/hermes/env", dependencies=[Depends(require_session)])
+async def env_list(request: Request) -> dict[str, Any]:
+    try:
+        # values arrive pre-masked from Hermes; we never unmask (no reveal route)
+        return await get_hermes_admin(request).env_list()
+    except HermesUnavailable as exc:
+        raise _admin_502(exc) from exc
+
+
+@router.put("/api/hermes/env", dependencies=[Depends(require_session)])
+async def env_put(request: Request, body: EnvPutBody) -> dict[str, Any]:
+    try:
+        result = await get_hermes_admin(request).env_put(body.key, body.value)
+    except HermesUnavailable as exc:
+        raise _admin_502(exc) from exc
+    await append_event("hermes.cron_changed", "env", f"set provider key {body.key}")
+    return result
+
+
+@router.delete("/api/hermes/env/{key}", dependencies=[Depends(require_session)])
+async def env_delete(request: Request, key: str) -> dict[str, Any]:
+    try:
+        result = await get_hermes_admin(request).env_delete(key)
+    except HermesUnavailable as exc:
+        raise _admin_502(exc) from exc
+    await append_event("hermes.cron_changed", "env", f"deleted provider key {key}")
+    return result
+
+
+@router.get(
+    "/api/hermes/analytics/usage", dependencies=[Depends(require_session)]
+)
+async def analytics_usage(request: Request) -> dict[str, Any]:
+    try:
+        return await get_hermes_admin(request).analytics_usage()
+    except HermesUnavailable as exc:
+        raise _admin_502(exc) from exc
+
+
+@router.get(
+    "/api/hermes/analytics/models", dependencies=[Depends(require_session)]
+)
+async def analytics_models(request: Request) -> dict[str, Any]:
+    try:
+        return await get_hermes_admin(request).analytics_models()
+    except HermesUnavailable as exc:
+        raise _admin_502(exc) from exc
+
+
+@router.get("/api/hermes/logs", dependencies=[Depends(require_session)])
+async def hermes_logs(request: Request, tail: int = 200) -> Response:
+    try:
+        text_body = await get_hermes_admin(request).logs(tail=tail)
+    except HermesUnavailable as exc:
+        raise _admin_502(exc) from exc
+    return Response(content=text_body, media_type="text/plain")
+
+
 # ---- Native Hermes surface (sessions, chat) ------------------------------
 
 
