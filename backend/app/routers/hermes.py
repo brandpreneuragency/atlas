@@ -12,11 +12,21 @@ from sse_starlette.sse import EventSourceResponse
 from app.auth import require_session
 from app.db import get_session
 from app.events import append_event
+from app.hermes.admin import HermesAdmin
 from app.hermes.factory import make_hermes_client
 from app.hermes.schemas import HermesUnavailable
 from app.routers.agents import _seed_default_agent
 
 router = APIRouter()
+
+
+def get_hermes_admin(request: Request) -> HermesAdmin:
+    """Per-app HermesAdmin (token cache survives across requests)."""
+    admin = getattr(request.app.state, "hermes_admin", None)
+    if admin is None:
+        admin = HermesAdmin(request.app.state.settings.hermes_admin_url)
+        request.app.state.hermes_admin = admin
+    return admin
 
 _HOP_BY_HOP_HEADERS = {
     "host",
@@ -67,6 +77,131 @@ async def hermes_proxy(
         status_code=upstream.status_code,
         headers=response_headers,
         media_type=upstream.headers.get("content-type"),
+    )
+
+
+# ---- Cron federation (proxied to HermesAdmin :9119) ----------------------
+
+
+class CronSchedule(BaseModel):
+    kind: str = "cron"
+    expr: str
+
+
+class CronCreateBody(BaseModel):
+    name: str
+    prompt: str
+    schedule: CronSchedule
+    skills: list[str] | None = None
+
+
+def _validate_cron_expr(expr: str) -> None:
+    from apscheduler.triggers.cron import CronTrigger
+
+    try:
+        CronTrigger.from_crontab(expr)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400, detail=f"invalid cron expression: {exc}"
+        ) from exc
+
+
+def _job_name(data: Any, fallback: str) -> str:
+    if isinstance(data, dict) and isinstance(data.get("name"), str):
+        return data["name"]
+    return fallback
+
+
+@router.get("/api/hermes/cron", dependencies=[Depends(require_session)])
+async def cron_list(request: Request) -> list[dict[str, Any]]:
+    try:
+        return await get_hermes_admin(request).cron_jobs()
+    except HermesUnavailable as exc:
+        await append_event("hermes.error", "cron", f"cron list failed: {exc}")
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.post("/api/hermes/cron", dependencies=[Depends(require_session)])
+async def cron_create(request: Request, body: CronCreateBody) -> dict[str, Any]:
+    _validate_cron_expr(body.schedule.expr)
+    try:
+        job = await get_hermes_admin(request).cron_create(
+            body.model_dump(exclude_none=True)
+        )
+    except HermesUnavailable as exc:
+        await append_event("hermes.error", "cron", f"cron create failed: {exc}")
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    await append_event(
+        "hermes.cron_changed", "cron", f"created cron job '{body.name}'"
+    )
+    return job
+
+
+@router.put("/api/hermes/cron/{job_id}", dependencies=[Depends(require_session)])
+async def cron_update(
+    request: Request, job_id: str, patch: dict[str, Any]
+) -> dict[str, Any]:
+    schedule = patch.get("schedule")
+    if isinstance(schedule, dict) and isinstance(schedule.get("expr"), str):
+        _validate_cron_expr(schedule["expr"])
+    try:
+        job = await get_hermes_admin(request).cron_update(job_id, patch)
+    except HermesUnavailable as exc:
+        await append_event("hermes.error", "cron", f"cron update failed: {exc}")
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    await append_event(
+        "hermes.cron_changed",
+        "cron",
+        f"updated cron job '{_job_name(job, job_id)}'",
+    )
+    return job
+
+
+@router.post(
+    "/api/hermes/cron/{job_id}/{action}",
+    dependencies=[Depends(require_session)],
+)
+async def cron_action(request: Request, job_id: str, action: str) -> dict[str, Any]:
+    admin = get_hermes_admin(request)
+    actions = {
+        "pause": (admin.cron_pause, "paused"),
+        "resume": (admin.cron_resume, "resumed"),
+        "trigger": (admin.cron_trigger, "triggered"),
+    }
+    if action not in actions:
+        raise HTTPException(status_code=404, detail="unknown cron action")
+    call, verb = actions[action]
+    try:
+        job = await call(job_id)
+    except HermesUnavailable as exc:
+        await append_event("hermes.error", "cron", f"cron {action} failed: {exc}")
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    await append_event(
+        "hermes.cron_changed", "cron", f"{verb} '{_job_name(job, job_id)}'"
+    )
+    return job
+
+
+@router.delete(
+    "/api/hermes/cron/{job_id}",
+    status_code=204,
+    dependencies=[Depends(require_session)],
+)
+async def cron_delete(request: Request, job_id: str) -> None:
+    admin = get_hermes_admin(request)
+    name = job_id
+    try:
+        jobs = await admin.cron_jobs()
+        name = next(
+            (j["name"] for j in jobs if j.get("id") == job_id and "name" in j),
+            job_id,
+        )
+        await admin.cron_delete(job_id)
+    except HermesUnavailable as exc:
+        await append_event("hermes.error", "cron", f"cron delete failed: {exc}")
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    await append_event(
+        "hermes.cron_changed", "cron", f"deleted cron job '{name}'"
     )
 
 
