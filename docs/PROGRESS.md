@@ -88,6 +88,7 @@ Phase 6 — COMPLETE (deployed + migration proof 2026-07-06). Next: Phase 7.
 - 2026-07-06: **Run cost model**: Hermes usage events carry tokens but no cost, so the engine approximates `cost_usd = (input+output tokens) × $1/1M` (constant `COST_USD_PER_TOKEN` in engine.py). Budget tests depend on this; revisit when Hermes reports real cost.
 - 2026-07-06: **Approvals router added in Task 5.5** (routers/approvals.py) — not in the 5.5 file list but required so `engine.resume` is reachable per the §5 route surface and the 5.3 skeleton comment ("resume() from approvals router").
 - 2026-07-06: Webhook + manual-run routes live in `routers/workflows.py` (`hooks_router` without session auth); Task 5.4 lists no router file, this was the least-new-files placement.
+- 2026-07-06: **Scout v2 real run cost ≈$3.97** (3,959,490 input / 9,064 output tokens at the $1/M approximation) — the live scout prompt does heavy tool use, far above the smoke-test scale. `App Store Scout v2` was left in PROGRESS without a `budget_usd_per_run` cap; recommend setting one (or `max_runs_per_hour`) before its daily 08:00 cron fires, since the engine's budget guard only stops a run already in progress once cost is added per step, not before it starts.
 
 ## DECISION NEEDED
-- (none) — 2026-07-06: Hermes Nous Portal re-auth done by user; live chat verified (PONG streamed, thread_id 2).
+- Should `budget_usd_per_run` be set on "App Store Scout v2" (workflow id 1, live) before its first scheduled fire? Recommend capping it given the ~$3.97 observed cost per run; awaiting user confirmation on a limit before Phase 7 work touches notifications/budgets further.
