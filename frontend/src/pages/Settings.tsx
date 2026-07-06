@@ -129,6 +129,50 @@ function NotificationSettings() {
   )
 }
 
+type BackupInfo = {
+  ok: boolean
+  ts?: string
+  size?: number
+  reason?: string
+  error?: string
+}
+
+function BackupStatus() {
+  const [info, setInfo] = useState<BackupInfo | null>(null)
+
+  useEffect(() => {
+    api
+      .get<BackupInfo>('/api/settings/backup')
+      .then(setInfo)
+      .catch(() => setInfo(null))
+  }, [])
+
+  return (
+    <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5" data-testid="backup-status">
+      <h2 className="text-lg font-medium text-slate-200">Backups</h2>
+      {info === null ? (
+        <p className="mt-2 text-sm text-slate-500">status unavailable</p>
+      ) : (
+        <p className="mt-2 flex items-center gap-2 text-sm text-slate-300">
+          <span
+            className={`h-2.5 w-2.5 rounded-full ${info.ok ? 'bg-emerald-400' : 'bg-rose-400'}`}
+          />
+          {info.ok ? (
+            <>
+              last backup {info.ts ? new Date(info.ts).toLocaleString() : 'unknown time'}
+              {typeof info.size === 'number' && (
+                <span className="text-slate-500">· {(info.size / 1024).toFixed(0)} KB</span>
+              )}
+            </>
+          ) : (
+            <span className="text-rose-300">{info.reason ?? info.error ?? 'failed'}</span>
+          )}
+        </p>
+      )}
+    </section>
+  )
+}
+
 export function Settings() {
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
@@ -201,9 +245,7 @@ export function Settings() {
       </section>
 
       <NotificationSettings />
-      <section className="rounded-2xl border border-dashed border-slate-800 p-5 text-sm text-slate-500">
-        Backups — coming in Phase 8
-      </section>
+      <BackupStatus />
     </div>
   )
 }

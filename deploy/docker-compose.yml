@@ -10,6 +10,7 @@ services:
     volumes:
       - atlas_control_data:/data
       - /home/admin/atlas:/opt/atlas
+      - /home/admin/atlas-control/.env:/app/server.env:ro
     networks:
       - atlas_net
     restart: unless-stopped

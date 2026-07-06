@@ -110,6 +110,20 @@ async def test_notifications() -> dict[str, bool]:
     }
 
 
+@router.get("/settings/backup", dependencies=[Depends(require_session)])
+async def backup_status(request: Request) -> dict[str, object]:
+    path = request.app.state.settings.data_dir / "backups" / "last-backup.json"
+    if not path.is_file():
+        return {"ok": False, "reason": "no backup yet"}
+    try:
+        parsed = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {"ok": False, "reason": "last-backup.json unreadable"}
+    if not isinstance(parsed, dict):
+        return {"ok": False, "reason": "last-backup.json unreadable"}
+    return parsed
+
+
 async def _paused() -> bool:
     async with get_session() as session:
         value = (

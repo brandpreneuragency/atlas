@@ -15,6 +15,8 @@ RUN apt-get update \
 COPY backend/ ./
 RUN uv sync --frozen --no-dev
 COPY --from=frontend /src/frontend/dist /app/static
+COPY deploy/backup.sh /app/deploy/backup.sh
+RUN chmod +x /app/deploy/backup.sh
 ENV ATLAS_STATIC_DIR=/app/static
 EXPOSE 8700
 HEALTHCHECK CMD curl -f http://localhost:8700/api/health || exit 1
