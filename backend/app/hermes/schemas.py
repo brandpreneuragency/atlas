@@ -1,0 +1,2 @@
+class HermesUnavailable(Exception):
+    pass

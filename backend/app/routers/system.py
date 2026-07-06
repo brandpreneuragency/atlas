@@ -4,6 +4,8 @@ from sqlalchemy import text
 
 from app.auth import require_session
 from app.db import get_session
+from app.hermes.client import HermesClient
+from app.hermes.schemas import HermesUnavailable
 
 router = APIRouter(prefix="/api")
 
@@ -25,7 +27,16 @@ async def _paused() -> bool:
 @router.get("/health")
 async def health(request: Request) -> dict[str, object]:
     settings = request.app.state.settings
-    hermes = {"runs_api": "mock"} if settings.mock_hermes else {"runs_api": "unknown"}
+    if settings.mock_hermes:
+        hermes = {"runs_api": "mock"}
+    else:
+        try:
+            await HermesClient(
+                settings.hermes_runs_url, settings.hermes_api_key, timeout_s=3.0
+            ).health()
+            hermes = {"runs_api": "ok"}
+        except HermesUnavailable as exc:
+            hermes = {"runs_api": f"unreachable: {exc}"}
     return {"status": "ok", "db": "ok", "hermes": hermes, "version": "0.1.0"}
 
 
