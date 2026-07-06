@@ -45,6 +45,8 @@ class NodeCtx:
     dry_run: bool = False
     emit: EmitFn = field(default=None)  # type: ignore[assignment]
     step_id: int | None = None
+    # engine hook: lets cancel() call stop_run on the active hermes run
+    register_hermes_run: Callable[[str], None] | None = None
 
 
 def _render(nctx: NodeCtx, template: str) -> str:
@@ -62,6 +64,8 @@ async def _exec_hermes_task(nctx: NodeCtx) -> dict[str, Any]:
     for _attempt in range(retries + 1):
         try:
             run_id = await nctx.hermes.create_run(prompt, session_key=session_key)
+            if nctx.register_hermes_run is not None:
+                nctx.register_hermes_run(run_id)
             output: dict[str, Any] | None = None
             async with asyncio.timeout(timeout_s):
                 async for event in nctx.hermes.run_events(run_id):
