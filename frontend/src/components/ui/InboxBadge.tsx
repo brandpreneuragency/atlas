@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../../api/client'
 import type { Approval } from '../../api/types'
 import { openAtlasSse } from '../../lib/sse'
+import { useSession } from '../../stores/useSession'
 
 /**
  * Pending-approval count for the sidebar: 30s poll + SSE `approval.requested`
@@ -25,6 +26,9 @@ export function InboxBadge() {
         ? null
         : openAtlasSse({
             url: '/api/events/stream',
+            // the badge is mounted on every Shell page — its connection doubles
+            // as the global live-feed health signal (ConnectionBanner)
+            onStatusChange: (status) => useSession.getState().setSseStatus(status),
             onEvent: (eventJson) => {
               try {
                 const event = JSON.parse(eventJson) as { kind?: string }

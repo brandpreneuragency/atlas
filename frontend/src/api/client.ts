@@ -21,9 +21,23 @@ async function parseError(response: Response): Promise<string> {
   }
 }
 
+// 401 from any API call (except the login attempt itself) → back to Login.
+let onUnauthorized: () => void = () => {
+  if (window.location.pathname !== '/login') {
+    window.location.assign('/login')
+  }
+}
+
+export function setOnUnauthorized(handler: () => void): void {
+  onUnauthorized = handler
+}
+
 async function request<T>(path: string, init: RequestInit): Promise<T> {
   const response = await fetch(path, { credentials: 'include', ...init })
   if (!response.ok) {
+    if (response.status === 401 && path !== '/api/auth/login') {
+      onUnauthorized()
+    }
     throw new ApiError(response.status, await parseError(response))
   }
   if (response.status === 204) {

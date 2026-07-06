@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { api } from '../api/client'
+import { DataState } from '../components/ui/DataState'
 
 type ReviewItem = {
   name: string
@@ -11,6 +12,7 @@ type ReviewItem = {
 
 export function Review() {
   const [items, setItems] = useState<ReviewItem[]>([])
+  const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -19,6 +21,7 @@ export function Review() {
     try {
       const rows = await api.get<ReviewItem[]>('/api/review')
       setItems(rows)
+      setError(null)
       setProcessing((current) => {
         const names = new Set(rows.map((r) => r.name))
         const next: Record<string, string> = {}
@@ -29,6 +32,8 @@ export function Review() {
       })
     } catch (e) {
       setError((e as Error).message)
+    } finally {
+      setLoading(false)
     }
   }, [])
 
@@ -77,10 +82,16 @@ export function Review() {
       <p className="mt-2 text-slate-400">
         Brain review notes pending a decision — approve dispatches the Hermes brain workflow
       </p>
-      {error && <p className="mt-4 text-sm text-rose-400">{error}</p>}
-      {items.length === 0 ? (
-        <p className="mt-8 text-slate-500">Nothing waiting for review.</p>
-      ) : (
+      <DataState
+        loading={loading}
+        error={error}
+        empty="Nothing waiting for review."
+        isEmpty={items.length === 0}
+        onRetry={() => {
+          setLoading(true)
+          void refetch()
+        }}
+      >
         <ul className="mt-6 space-y-4">
           {items.map((item) => {
             const busy = item.name in processing
@@ -134,7 +145,7 @@ export function Review() {
             )
           })}
         </ul>
-      )}
+      </DataState>
     </div>
   )
 }

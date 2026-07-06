@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 
 import { api } from '../api/client'
 import type { Approval } from '../api/types'
+import { DataState } from '../components/ui/DataState'
 
 function relativeTime(ts: string): string {
   const then = new Date(ts).getTime()
@@ -18,13 +19,18 @@ function relativeTime(ts: string): string {
 
 export function Inbox() {
   const [approvals, setApprovals] = useState<Approval[]>([])
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const refetch = useCallback(() => {
     api
       .get<Approval[]>('/api/approvals?status=pending')
-      .then(setApprovals)
+      .then((rows) => {
+        setApprovals(rows)
+        setError(null)
+      })
       .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => {
@@ -46,10 +52,16 @@ export function Inbox() {
     <div>
       <h1 className="text-3xl font-semibold">Inbox</h1>
       <p className="mt-2 text-slate-400">Pending approvals across workflows and Hermes runs</p>
-      {error && <p className="mt-4 text-sm text-rose-400">{error}</p>}
-      {approvals.length === 0 ? (
-        <p className="mt-8 text-slate-500">No pending approvals.</p>
-      ) : (
+      <DataState
+        loading={loading}
+        error={error}
+        empty="No pending approvals."
+        isEmpty={approvals.length === 0}
+        onRetry={() => {
+          setLoading(true)
+          refetch()
+        }}
+      >
         <ul className="mt-6 space-y-3">
           {approvals.map((approval) => (
             <li
@@ -90,7 +102,7 @@ export function Inbox() {
             </li>
           ))}
         </ul>
-      )}
+      </DataState>
     </div>
   )
 }
