@@ -44,4 +44,20 @@ export const api = {
       body: JSON.stringify(body),
     })
   },
+  put<T = void>(path: string, body: JsonBody): Promise<T> {
+    return request<T>(path, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'X-Atlas-CSRF': '1' },
+      body: JSON.stringify(body),
+    })
+  },
+  postForm<T = void>(path: string, form: FormData): Promise<T> {
+    return request<T>(path, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'X-Atlas-CSRF': '1' },
+      body: form,
+    })
+  },
 }

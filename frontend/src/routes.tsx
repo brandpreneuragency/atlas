@@ -4,6 +4,7 @@ import type { RouteObject } from 'react-router-dom'
 
 import { Shell } from './components/ui/Shell'
 import { Agent } from './pages/Agent'
+import { Files } from './pages/Files'
 import { Login } from './pages/Login'
 import { MissionControl } from './pages/MissionControl'
 import { SessionDetail } from './pages/SessionDetail'
@@ -44,7 +45,7 @@ export const routes: RouteObject[] = [
     path: '/files',
     element: (
       <ShellPage>
-        <Placeholder title="Files" phase="Phase 3" />
+        <Files />
       </ShellPage>
     ),
   },
