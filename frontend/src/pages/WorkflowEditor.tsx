@@ -5,6 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { api, ApiError } from '../api/client'
 import type { Workflow } from '../api/types'
 import { Canvas } from '../components/flow/Canvas'
+import { ConfigPanel, extractInvalidNodeIds } from '../components/flow/ConfigPanel'
 import { NodePalette } from '../components/flow/NodePalette'
 import { useGraph } from '../components/flow/useGraph'
 
@@ -14,7 +15,16 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
   const [version, setVersion] = useState(workflow.version)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
+  const [shellAllowlist, setShellAllowlist] = useState<string[]>([])
   const navigate = useNavigate()
+
+  useEffect(() => {
+    // best effort: allowlist shown in the shell.command form
+    api
+      .get<{ shell_allowlist?: string[] }>('/api/settings/notifications')
+      .then((res) => setShellAllowlist(res.shell_allowlist ?? []))
+      .catch(() => setShellAllowlist([]))
+  }, [])
 
   // unsaved-changes guard (browser navigation)
   useEffect(() => {
@@ -36,10 +46,31 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
         budget_usd_per_run: workflow.budget_usd_per_run,
       })
       setVersion(newVersion)
+      graph.setNodes((prev) =>
+        prev.map((n) => ({ ...n, data: { ...n.data, invalid: false } })),
+      )
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : 'save failed')
+      if (err instanceof ApiError) {
+        setError(err.detail)
+        if (err.status === 422) {
+          const ids = extractInvalidNodeIds(
+            err.detail,
+            graph.nodes.map((n) => n.id),
+          )
+          graph.setNodes((prev) =>
+            prev.map((n) => ({
+              ...n,
+              data: { ...n.data, invalid: ids.includes(n.id) },
+            })),
+          )
+        }
+      } else {
+        setError('save failed')
+      }
     }
   }, [graph, name, workflow])
+
+  const selectedNode = graph.nodes.find((n) => n.id === selected) ?? null
 
   return (
     <div className="flex h-full flex-col gap-3" data-testid="workflow-editor">
@@ -92,10 +123,17 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
           onSelectNode={setSelected}
           markDirty={graph.markDirty}
         />
-        {selected && (
-          <div data-testid="selected-node-id" className="hidden">
-            {selected}
-          </div>
+        {selectedNode && (
+          <ConfigPanel
+            node={selectedNode}
+            upstreamIds={[
+              'trigger',
+              ...graph.nodes.map((n) => n.id).filter((nid) => nid !== selected),
+            ]}
+            shellAllowlist={shellAllowlist}
+            onChange={graph.updateNodeConfig}
+            onClose={() => setSelected(null)}
+          />
         )}
       </div>
     </div>
