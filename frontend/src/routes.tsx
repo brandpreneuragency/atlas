@@ -12,6 +12,8 @@ import { Login } from './pages/Login'
 import { MissionControl } from './pages/MissionControl'
 import { SessionDetail } from './pages/SessionDetail'
 import { Sessions } from './pages/Sessions'
+import { RunDetail } from './pages/RunDetail'
+import { WorkflowEditor } from './pages/WorkflowEditor'
 
 function Placeholder({ title, phase }: { title: string; phase: string }) {
   return (
@@ -41,6 +43,22 @@ export const routes: RouteObject[] = [
     element: (
       <ShellPage>
         <Automation />
+      </ShellPage>
+    ),
+  },
+  {
+    path: '/automation/workflows/:id',
+    element: (
+      <ShellPage>
+        <WorkflowEditor />
+      </ShellPage>
+    ),
+  },
+  {
+    path: '/automation/runs/:id',
+    element: (
+      <ShellPage>
+        <RunDetail />
       </ShellPage>
     ),
   },
