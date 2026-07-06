@@ -4,7 +4,7 @@
 > Resume command: **"Read CLAUDE.md, docs/PROGRESS.md, and docs/MASTER_PLAN.md. Continue with the next phase. Run acceptance criteria when done."**
 
 ## Current
-Phase 1 — IN PROGRESS (Tasks 1.1–1.5 complete; Task 1.6 next — needs dashboard password for deploy env).
+Phase 1 — IN PROGRESS (Tasks 1.1–1.5 complete; Task 1.6 code prepared; blocked on server `.env` creation with user-chosen dashboard password).
 
 ## Done
 - [x] Planning: design spec + master plan + phases 0–8 + execution playbook written and approved (2026-07-06).

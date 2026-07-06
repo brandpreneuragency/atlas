@@ -1,0 +1,22 @@
+services:
+  atlas_control:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: atlas_control
+    env_file: /home/admin/atlas-control/.env
+    volumes:
+      - atlas_control_data:/data
+      - /home/admin/atlas:/opt/atlas
+    networks:
+      - atlas_net
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8700:8700"
+
+volumes:
+  atlas_control_data:
+
+networks:
+  atlas_net:
+    external: true
