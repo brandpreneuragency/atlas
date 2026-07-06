@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from app.auth import ApiAuthMiddleware, CsrfMiddleware, RateLimiter, bootstrap_password, create_auth_router
 from app.config import Settings, get_settings
 from app.db import init_db
-from app.routers import events, hermes, system
+from app.routers import agents, events, hermes, system
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -31,6 +31,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(create_auth_router(RateLimiter()))
     app.include_router(system.router)
     app.include_router(events.router)
+    app.include_router(agents.router)
     app.include_router(hermes.router)
 
     static_dir = resolved_settings.static_dir
