@@ -96,7 +96,9 @@ class CronCreateBody(BaseModel):
 
 
 def _validate_cron_expr(expr: str) -> None:
-    from apscheduler.triggers.cron import CronTrigger
+    from apscheduler.triggers.cron import (  # type: ignore[import-untyped]
+        CronTrigger,
+    )
 
     try:
         CronTrigger.from_crontab(expr)
