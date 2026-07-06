@@ -45,6 +45,10 @@ chmod 600 "$TARBALL"
 # off-box: Syncthing-synced folder (06_backups allowlisted in ATLAS .stignore)
 mkdir -p "$SYNC_DIR"
 cp "$TARBALL" "$SYNC_DIR/" || fail "copy to sync dir failed"
+# Syncthing runs as the ATLAS tree owner — it must be able to read the copy
+# (no-ops when the container already runs as that user)
+chown --reference="${ATLAS_ATLAS_ROOT:-/opt/atlas}" "$SYNC_DIR" "$SYNC_DIR/$(basename "$TARBALL")" 2>/dev/null || true
+chmod 640 "$SYNC_DIR/$(basename "$TARBALL")" 2>/dev/null || true
 
 # retention: keep last 14 (by name = by date) in both locations
 for dir in "$BACKUP_DIR" "$SYNC_DIR"; do
