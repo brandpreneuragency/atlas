@@ -98,6 +98,13 @@ async def _snapshot_version(
     )
 
 
+async def _resync_triggers(request: Request) -> None:
+    # cron jobs / file watches must follow enable/update/delete immediately
+    triggers = getattr(request.app.state, "triggers", None)
+    if triggers is not None:
+        await triggers.sync()
+
+
 @router.get("/workflows")
 async def list_workflows() -> list[dict[str, Any]]:
     async with get_session() as session:
@@ -143,7 +150,7 @@ async def get_workflow(workflow_id: int) -> dict[str, Any]:
 
 
 @router.put("/workflows/{workflow_id}")
-async def update_workflow(workflow_id: int, body: WorkflowIn) -> dict[str, Any]:
+async def update_workflow(workflow_id: int, body: WorkflowIn, request: Request) -> dict[str, Any]:
     _parse_and_validate(body.graph)
     graph_json = json.dumps(body.graph, separators=(",", ":"))
     async with get_session() as session:
@@ -168,21 +175,24 @@ async def update_workflow(workflow_id: int, body: WorkflowIn) -> dict[str, Any]:
         )
         await _snapshot_version(session, workflow_id, new_version, graph_json)
         await session.commit()
-        return _row_to_workflow(await _fetch_workflow(session, workflow_id))
+        row = _row_to_workflow(await _fetch_workflow(session, workflow_id))
+    await _resync_triggers(request)
+    return row
 
 
 @router.delete("/workflows/{workflow_id}", status_code=204)
-async def delete_workflow(workflow_id: int) -> None:
+async def delete_workflow(workflow_id: int, request: Request) -> None:
     async with get_session() as session:
         await _fetch_workflow(session, workflow_id)
         await session.execute(
             text("DELETE FROM workflows WHERE id=:id"), {"id": workflow_id}
         )
         await session.commit()
+    await _resync_triggers(request)
 
 
 @router.post("/workflows/{workflow_id}/enable")
-async def enable_workflow(workflow_id: int, body: EnableIn) -> dict[str, Any]:
+async def enable_workflow(workflow_id: int, body: EnableIn, request: Request) -> dict[str, Any]:
     async with get_session() as session:
         await _fetch_workflow(session, workflow_id)
         await session.execute(
@@ -190,7 +200,9 @@ async def enable_workflow(workflow_id: int, body: EnableIn) -> dict[str, Any]:
             {"e": int(body.enabled), "now": _now_iso(), "id": workflow_id},
         )
         await session.commit()
-        return _row_to_workflow(await _fetch_workflow(session, workflow_id))
+        row = _row_to_workflow(await _fetch_workflow(session, workflow_id))
+    await _resync_triggers(request)
+    return row
 
 
 @router.get("/workflows/{workflow_id}/versions")
@@ -215,7 +227,7 @@ async def list_versions(workflow_id: int) -> list[dict[str, Any]]:
 
 
 @router.post("/workflows/{workflow_id}/rollback")
-async def rollback_workflow(workflow_id: int, body: RollbackIn) -> dict[str, Any]:
+async def rollback_workflow(workflow_id: int, body: RollbackIn, request: Request) -> dict[str, Any]:
     async with get_session() as session:
         row = await _fetch_workflow(session, workflow_id)
         result = await session.execute(
@@ -236,7 +248,9 @@ async def rollback_workflow(workflow_id: int, body: RollbackIn) -> dict[str, Any
         )
         await _snapshot_version(session, workflow_id, new_version, target.graph)
         await session.commit()
-        return _row_to_workflow(await _fetch_workflow(session, workflow_id))
+        row = _row_to_workflow(await _fetch_workflow(session, workflow_id))
+    await _resync_triggers(request)
+    return row
 
 
 @router.post("/workflows/{workflow_id}/run")
