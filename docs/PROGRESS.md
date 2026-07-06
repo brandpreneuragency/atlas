@@ -4,7 +4,7 @@
 > Resume command: **"Read CLAUDE.md, docs/PROGRESS.md, and docs/MASTER_PLAN.md. Continue with the next phase. Run acceptance criteria when done."**
 
 ## Current
-Phase 6 — COMPLETE (deployed + migration proof 2026-07-06). Next: Phase 7.
+Phase 7 — tasks 7.1–7.4 complete; Task 7.5 (deploy + live verification) in progress — BLOCKED on user-supplied Telegram bot token/chat id.
 
 ## Done
 - [x] Planning: design spec + master plan + phases 0–8 + execution playbook written and approved (2026-07-06).
@@ -53,6 +53,11 @@ Phase 6 — COMPLETE (deployed + migration proof 2026-07-06). Next: Phase 7.
 
 **Phase 6 acceptance criteria (2026-07-06): ALL PASS** — (1) workflow buildable in UI (palette → connect → configure → save; versions + rollback tested); (2) live node states from SSE, failures red with error one click away, dry-run touches nothing; (3) Scout v2 exists, ran real once, output in `04_reports/appstore/`; (4) backend 168 tests + ruff + mypy + noexec, frontend 53 tests + tsc + eslint + build all green; PROGRESS updated.
 
+- [x] Task 7.1 — notification transports (commit fdecc81): `notify/telegram.py` real send (settings-table `telegram_bot_token`/`telegram_chat_id`, plain text — NO parse_mode, missing config → False + single `system.error` event, re-armed on settings save), `notify/email.py` via aiosmtplib (`smtp_url` `smtp://user:pass@host:port`, `smtps://` = implicit TLS, `smtp_to`). Routes: `GET/PUT /api/settings/notifications` (secrets never echoed — only `*_set` booleans; partial PUT keeps omitted keys), `POST /api/settings/notifications/test` → per-channel bool. Tests: `test_notify.py` (8).
+- [x] Task 7.2 — approval flow end-to-end (commit 7ddb499): engine gate notify hook (`_notify_gate`: telegram/email per node `notify[]`, message + `{public_url}/runs/{id}` link, sent on parking); `Engine.expire_approvals()` + 60s `_expiry_loop` started in `startup()` (+ `Engine.shutdown()` in lifespan) — pending gate approvals past node `timeout_h` → approval `expired`, step failed, run failed `"approval timed out"`; hermes-side approvals: relayed `approval.request` run event → `approvals` row kind `hermes_run` + `approval.requested` feed event, resolve calls `HermesClient.approve_run` (router branches by kind; gate → `engine.resume`). Tests: `test_approvals.py` (7).
+- [x] Task 7.3 — review queue backend (commit f6ff1d4): `review/service.py` (frontmatter parse of `03_brain/01_review/pending/*.md` → `{name, frontmatter, body_preview, source_path}`; `decide()` dispatches Hermes run with the exact PHASE_7 prompt template, appends `review.decided`, relays run events to feed; note NOT moved by us) + `routers/review.py` (`GET /api/review`, `POST /api/review/{name}/decide` — 404 missing, 400 jail escape, 422 bad decision). Tests: `test_review.py` (7). Backend suite: 190 green.
+- [x] Task 7.4 — Inbox + Review UI (commits 561a955, fa8a575): `pages/Inbox.tsx` (pending approvals: message, kind label, run link, age, Approve/Reject → resolve with optimistic removal + poll-restore on failure, 30s poll), `components/ui/InboxBadge.tsx` (sidebar count: 30s poll + SSE `approval.requested`/`approval.resolved` push), `pages/Review.tsx` (frontmatter chips, body preview, Approve/Reject → decide, "Hermes working…" progress + 3s poll until the pending file disappears), routes `/inbox` + `/review`, Nav updated; Settings page gained the Notifications form (token/chat id/SMTP masked as set-booleans, Save + "Send test message" with per-channel result). Tests: `inbox.test.tsx` (4). Frontend: 57 tests + tsc + eslint + build green.
+
 ## Phase-0 records (CAPTURED — later phases depend on these)
 - **Run POST payload:** `POST /v1/runs {"input": "<prompt>"}` → 202 `{"run_id":"run_<hex>","status":"started"}`. (`input` required; may be message-list.)
 - **Run terminal event + output field:** SSE field is **`event`** (not `type`); terminal = `run.completed` (also `run.failed`/`run.cancelled`); output text = `output` field; map to internal `output_text`.
@@ -92,5 +97,8 @@ Phase 6 — COMPLETE (deployed + migration proof 2026-07-06). Next: Phase 7.
 
 - 2026-07-06: User removed "App Store Scout v2" (workflow id 1) after the Phase 6 migration proof, citing its ~$3.97/run cost. `DELETE /api/workflows/1` → 204, cascade clean, `TriggerService.sync()` unregistered its cron job. The Hermes-native "App Store Market Scout" job remains **paused** — no app-store scouting automation is currently running (neither the Hermes job nor a workflow).
 
+- 2026-07-06: **Hermes approval id storage** — the §4 approvals schema has no column for the Hermes approval id that `approve_run` needs, so `external_ref` encodes `"<hermes_run_id>|<hermes_approval_id>"` (kind `hermes_run` only; router splits on `|`). Plan text said external_ref = hermes run id; the prefix still is.
+
 ## DECISION NEEDED
+- Phase 7 live verification needs the Telegram bot token + chat id from the user (create via @BotFather), entered in Settings → Notifications. Blocked until supplied.
 - No automation currently covers app-store scouting (Scout v2 deleted; Hermes-native job still paused from the migration proof). Resume the Hermes-native job, rebuild a budget-capped workflow version, or leave both off? Awaiting user direction.
