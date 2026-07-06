@@ -1,5 +1,7 @@
 import { NavLink } from 'react-router-dom'
 
+import { InboxBadge } from './InboxBadge'
+
 const items = [
   ['/', 'Mission Control'],
   ['/agent', 'Agent'],
@@ -8,6 +10,7 @@ const items = [
   ['/files', 'Files'],
   ['/models', 'Models'],
   ['/inbox', 'Inbox'],
+  ['/review', 'Review'],
   ['/settings', 'Settings'],
 ] as const
 
@@ -27,6 +30,7 @@ export function Nav() {
           }
         >
           {label}
+          {to === '/inbox' && <InboxBadge />}
         </NavLink>
       ))}
     </nav>

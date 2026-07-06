@@ -6,6 +6,8 @@ import { Shell } from './components/ui/Shell'
 import { Agent } from './pages/Agent'
 import { Automation } from './pages/Automation'
 import { Files } from './pages/Files'
+import { Inbox } from './pages/Inbox'
+import { Review } from './pages/Review'
 import { Models } from './pages/Models'
 import { Settings } from './pages/Settings'
 import { Login } from './pages/Login'
@@ -14,15 +16,6 @@ import { SessionDetail } from './pages/SessionDetail'
 import { Sessions } from './pages/Sessions'
 import { RunDetail } from './pages/RunDetail'
 import { WorkflowEditor } from './pages/WorkflowEditor'
-
-function Placeholder({ title, phase }: { title: string; phase: string }) {
-  return (
-    <div>
-      <h1 className="text-3xl font-semibold">{title}</h1>
-      <p className="mt-2 text-slate-400">Coming in {phase}</p>
-    </div>
-  )
-}
 
 function ShellPage({ children }: { children: ReactNode }) {
   return <Shell>{children}</Shell>
@@ -106,7 +99,15 @@ export const routes: RouteObject[] = [
     path: '/inbox',
     element: (
       <ShellPage>
-        <Placeholder title="Inbox" phase="Phase 7" />
+        <Inbox />
+      </ShellPage>
+    ),
+  },
+  {
+    path: '/review',
+    element: (
+      <ShellPage>
+        <Review />
       </ShellPage>
     ),
   },
