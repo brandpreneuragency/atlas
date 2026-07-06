@@ -110,6 +110,46 @@ async def test_notifications() -> dict[str, bool]:
     }
 
 
+class LimitsIn(BaseModel):
+    default_max_runs_per_hour: int = 6
+    default_budget_usd_per_run: float | None = None
+
+
+# The engine's global semaphore is a code constant (Engine.__init__); shown read-only.
+GLOBAL_CONCURRENCY = 2
+
+
+async def get_default_limits() -> tuple[int, float | None]:
+    """Global defaults applied to new workflows (settings-table backed)."""
+    mrph = await _setting("default_max_runs_per_hour")
+    budget = await _setting("default_budget_usd_per_run")
+    return (int(mrph) if mrph else 6, float(budget) if budget else None)
+
+
+def _limits_view(mrph: int, budget: float | None) -> dict[str, object]:
+    return {
+        "default_max_runs_per_hour": mrph,
+        "default_budget_usd_per_run": budget,
+        "global_concurrency": GLOBAL_CONCURRENCY,
+    }
+
+
+@router.get("/settings/limits", dependencies=[Depends(require_session)])
+async def get_limits() -> dict[str, object]:
+    mrph, budget = await get_default_limits()
+    return _limits_view(mrph, budget)
+
+
+@router.put("/settings/limits", dependencies=[Depends(require_session)])
+async def put_limits(body: LimitsIn) -> dict[str, object]:
+    await _set_setting("default_max_runs_per_hour", str(body.default_max_runs_per_hour))
+    await _set_setting(
+        "default_budget_usd_per_run",
+        "" if body.default_budget_usd_per_run is None else str(body.default_budget_usd_per_run),
+    )
+    return _limits_view(body.default_max_runs_per_hour, body.default_budget_usd_per_run)
+
+
 @router.get("/settings/backup", dependencies=[Depends(require_session)])
 async def backup_status(request: Request) -> dict[str, object]:
     path = request.app.state.settings.data_dir / "backups" / "last-backup.json"

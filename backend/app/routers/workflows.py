@@ -27,7 +27,8 @@ class WorkflowIn(BaseModel):
     name: str = Field(min_length=1)
     description: str = ""
     graph: dict[str, Any]
-    max_runs_per_hour: int = 6
+    # None/omitted → global defaults from /api/settings/limits (Task 8.2)
+    max_runs_per_hour: int | None = None
     budget_usd_per_run: float | None = None
 
 
@@ -116,9 +117,18 @@ async def list_workflows() -> list[dict[str, Any]]:
 
 @router.post("/workflows", status_code=201)
 async def create_workflow(body: WorkflowIn) -> dict[str, Any]:
+    from app.routers.system import get_default_limits
+
     _parse_and_validate(body.graph)
     graph_json = json.dumps(body.graph, separators=(",", ":"))
     now = _now_iso()
+    default_mrph, default_budget = await get_default_limits()
+    mrph = body.max_runs_per_hour if body.max_runs_per_hour is not None else default_mrph
+    budget = (
+        body.budget_usd_per_run
+        if "budget_usd_per_run" in body.model_fields_set
+        else default_budget
+    )
     async with get_session() as session:
         result = await session.execute(
             text(
@@ -131,8 +141,8 @@ async def create_workflow(body: WorkflowIn) -> dict[str, Any]:
                 "name": body.name,
                 "desc": body.description,
                 "graph": graph_json,
-                "mrph": body.max_runs_per_hour,
-                "budget": body.budget_usd_per_run,
+                "mrph": mrph,
+                "budget": budget,
                 "now": now,
             },
         )
@@ -156,6 +166,17 @@ async def update_workflow(workflow_id: int, body: WorkflowIn, request: Request) 
     async with get_session() as session:
         row = await _fetch_workflow(session, workflow_id)
         new_version = row.version + 1
+        # omitted limits keep their current values (defaults only apply at create)
+        mrph = (
+            body.max_runs_per_hour
+            if body.max_runs_per_hour is not None
+            else row.max_runs_per_hour
+        )
+        budget = (
+            body.budget_usd_per_run
+            if "budget_usd_per_run" in body.model_fields_set
+            else row.budget_usd_per_run
+        )
         await session.execute(
             text(
                 "UPDATE workflows SET name=:name, description=:desc, graph=:graph, "
@@ -167,8 +188,8 @@ async def update_workflow(workflow_id: int, body: WorkflowIn, request: Request) 
                 "desc": body.description,
                 "graph": graph_json,
                 "v": new_version,
-                "mrph": body.max_runs_per_hour,
-                "budget": body.budget_usd_per_run,
+                "mrph": mrph,
+                "budget": budget,
                 "now": _now_iso(),
                 "id": workflow_id,
             },

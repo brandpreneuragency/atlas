@@ -230,3 +230,56 @@ describe('VersionsDrawer', () => {
     expect(JSON.parse(String((call?.[1] as RequestInit).body))).toEqual({ version: 1 })
   })
 })
+
+describe('Automation guardrails (Task 8.2)', () => {
+  const WF_OK = {
+    id: 3, name: 'digest', description: '', enabled: true, version: 1,
+    max_runs_per_hour: 6, budget_usd_per_run: null,
+    graph: { nodes: [], edges: [] },
+    created_at: '2026-07-06T00:00:00+00:00', updated_at: '2026-07-06T00:00:00+00:00',
+  }
+  const WF_BUDGET = { ...WF_OK, id: 4, name: 'expensive' }
+  const WF_BREAKER = { ...WF_OK, id: 5, name: 'loopy' }
+  const runBase = {
+    trigger_kind: 'manual', trigger_payload: {}, dry_run: false,
+    tokens_in: 0, tokens_out: 0, started_at: null, finished_at: null,
+    created_at: new Date().toISOString(),
+  }
+  const RUNS = [
+    { ...runBase, id: 20, workflow_id: 3, status: 'succeeded', error: null, cost_usd: 1.25 },
+    { ...runBase, id: 21, workflow_id: 4, status: 'budget_exceeded', error: 'budget exceeded ($0.5 > $0.1)', cost_usd: 0.5 },
+    { ...runBase, id: 22, workflow_id: 5, status: 'failed', error: 'circuit breaker', cost_usd: 0 },
+  ]
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.startsWith('/api/hermes/cron')) return jsonResponse([])
+      if (url.startsWith('/api/workflows')) return jsonResponse([WF_OK, WF_BUDGET, WF_BREAKER])
+      if (url.startsWith('/api/runs')) return jsonResponse(RUNS)
+      return jsonResponse({}, 204)
+    }))
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
+  })
+
+  it('shows today totals across all workflows', async () => {
+    render(<MemoryRouter><Automation /></MemoryRouter>)
+    const totals = await screen.findByTestId('workflow-totals')
+    expect(totals).toHaveTextContent('3 runs today')
+    expect(totals).toHaveTextContent('$1.75')
+  })
+
+  it('budget_exceeded and circuit breaker get distinct badges with reason', async () => {
+    render(<MemoryRouter><Automation /></MemoryRouter>)
+    const budgetBadge = await screen.findByTestId('guard-badge-4')
+    expect(budgetBadge).toHaveTextContent(/budget/i)
+    expect(budgetBadge).toHaveAttribute('title', expect.stringContaining('$0.5'))
+    const breakerBadge = screen.getByTestId('guard-badge-5')
+    expect(breakerBadge).toHaveTextContent(/circuit breaker/i)
+    expect(screen.queryByTestId('guard-badge-3')).not.toBeInTheDocument()
+  })
+})

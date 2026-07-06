@@ -175,6 +175,21 @@ function WorkflowsSection() {
   }
 
   const today = new Date().toDateString()
+  const todayRunsAll = runs.filter((r) => new Date(r.created_at).toDateString() === today)
+  const totalCost = todayRunsAll.reduce((sum, r) => sum + r.cost_usd, 0)
+
+  const guardInfo = (wfId: number): { label: string; reason: string } | null => {
+    const lastRun = runs.find((r) => r.workflow_id === wfId) ?? null
+    if (!lastRun) return null
+    if (lastRun.status === 'budget_exceeded') {
+      return { label: 'budget exceeded', reason: lastRun.error ?? 'budget exceeded' }
+    }
+    if (lastRun.status === 'failed' && lastRun.error === 'circuit breaker') {
+      return { label: 'circuit breaker', reason: 'hit max runs per hour' }
+    }
+    return null
+  }
+
   const statsFor = (wfId: number) => {
     const todayRuns = runs.filter(
       (r) => r.workflow_id === wfId && new Date(r.created_at).toDateString() === today,
@@ -190,7 +205,12 @@ function WorkflowsSection() {
   return (
     <section>
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-lg font-medium text-slate-200">Workflows</h2>
+        <div className="flex items-baseline gap-4">
+          <h2 className="text-lg font-medium text-slate-200">Workflows</h2>
+          <span data-testid="workflow-totals" className="text-sm text-slate-400">
+            {todayRunsAll.length} runs today · ${totalCost.toFixed(2)} total cost
+          </span>
+        </div>
         <button
           type="button"
           className="rounded-lg border border-cyan-500 px-3 py-1.5 text-sm font-medium text-cyan-300"
@@ -234,6 +254,18 @@ function WorkflowsSection() {
                       >
                         {workflow.name}
                       </Link>
+                      {(() => {
+                        const guard = guardInfo(workflow.id)
+                        return guard ? (
+                          <span
+                            data-testid={`guard-badge-${workflow.id}`}
+                            title={guard.reason}
+                            className="ml-2 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs text-amber-300"
+                          >
+                            {guard.label}
+                          </span>
+                        ) : null
+                      })()}
                     </td>
                     <td className="px-4 py-2">
                       <button

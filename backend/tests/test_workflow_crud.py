@@ -184,3 +184,58 @@ async def test_delete_cascades(app_client):
 async def test_get_missing_workflow_404(app_client):
     await _login(app_client)
     assert (await app_client.get("/api/workflows/9999")).status_code == 404
+
+
+# ---------------------------------------------------------------- Task 8.2
+
+
+@pytest.mark.asyncio
+async def test_settings_limits_roundtrip_and_readonly_concurrency(app_client):
+    await _login(app_client)
+    got = await app_client.get("/api/settings/limits")
+    assert got.status_code == 200
+    assert got.json() == {
+        "default_max_runs_per_hour": 6,
+        "default_budget_usd_per_run": None,
+        "global_concurrency": 2,
+    }
+    put = await app_client.put(
+        "/api/settings/limits",
+        json={"default_max_runs_per_hour": 3, "default_budget_usd_per_run": 0.5},
+        headers=CSRF,
+    )
+    assert put.status_code == 200
+    body = put.json()
+    assert body["default_max_runs_per_hour"] == 3
+    assert body["default_budget_usd_per_run"] == 0.5
+    assert body["global_concurrency"] == 2  # read-only, always the semaphore value
+
+
+@pytest.mark.asyncio
+async def test_new_workflow_inherits_global_defaults(app_client):
+    await _login(app_client)
+    await app_client.put(
+        "/api/settings/limits",
+        json={"default_max_runs_per_hour": 3, "default_budget_usd_per_run": 0.5},
+        headers=CSRF,
+    )
+    # omitted limits -> defaults applied
+    response = await _create(app_client, name="inherits")
+    assert response.status_code == 201
+    body = response.json()
+    assert body["max_runs_per_hour"] == 3
+    assert body["budget_usd_per_run"] == 0.5
+    # explicit values still win
+    explicit = await app_client.post(
+        "/api/workflows",
+        json={
+            "name": "explicit",
+            "graph": example_graph(),
+            "max_runs_per_hour": 10,
+            "budget_usd_per_run": None,
+        },
+        headers=CSRF,
+    )
+    assert explicit.status_code == 201
+    assert explicit.json()["max_runs_per_hour"] == 10
+    assert explicit.json()["budget_usd_per_run"] is None

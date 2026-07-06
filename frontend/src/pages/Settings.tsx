@@ -129,6 +129,84 @@ function NotificationSettings() {
   )
 }
 
+type Limits = {
+  default_max_runs_per_hour: number
+  default_budget_usd_per_run: number | null
+  global_concurrency: number
+}
+
+function LimitsSettings() {
+  const [mrph, setMrph] = useState('')
+  const [budget, setBudget] = useState('')
+  const [concurrency, setConcurrency] = useState<number | null>(null)
+  const [status, setStatus] = useState<string | null>(null)
+
+  useEffect(() => {
+    api
+      .get<Limits>('/api/settings/limits')
+      .then((body) => {
+        setMrph(String(body.default_max_runs_per_hour))
+        setBudget(body.default_budget_usd_per_run === null ? '' : String(body.default_budget_usd_per_run))
+        setConcurrency(body.global_concurrency)
+      })
+      .catch(() => undefined)
+  }, [])
+
+  const save = async () => {
+    setStatus(null)
+    try {
+      await api.put('/api/settings/limits', {
+        default_max_runs_per_hour: Number(mrph),
+        default_budget_usd_per_run: budget === '' ? null : Number(budget),
+      })
+      setStatus('Saved — applied to new workflows.')
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'save failed')
+    }
+  }
+
+  const input =
+    'mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm'
+
+  return (
+    <section className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
+      <h2 className="text-lg font-medium text-slate-200">Run limits & budgets</h2>
+      <label className="block text-sm text-slate-300">
+        Default max runs per hour
+        <input
+          type="number"
+          min={1}
+          className={input}
+          value={mrph}
+          onChange={(e) => setMrph(e.target.value)}
+        />
+      </label>
+      <label className="block text-sm text-slate-300">
+        Default budget per run (USD, empty = no cap)
+        <input
+          type="number"
+          step="0.01"
+          className={input}
+          value={budget}
+          onChange={(e) => setBudget(e.target.value)}
+        />
+      </label>
+      <p className="text-sm text-slate-400">
+        Global concurrency: <span className="text-slate-200">{concurrency ?? '…'}</span>{' '}
+        <span className="text-xs text-slate-500">(fixed — engine semaphore)</span>
+      </p>
+      {status && <p className="text-sm text-slate-300">{status}</p>}
+      <button
+        type="button"
+        className="rounded-lg bg-cyan-500 px-3 py-2 text-sm font-medium text-slate-950"
+        onClick={() => void save()}
+      >
+        Save limits
+      </button>
+    </section>
+  )
+}
+
 type BackupInfo = {
   ok: boolean
   ts?: string
@@ -243,6 +321,8 @@ export function Settings() {
               : 'released — automation running'}
         </p>
       </section>
+
+      <LimitsSettings />
 
       <NotificationSettings />
       <BackupStatus />
