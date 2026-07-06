@@ -42,7 +42,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = resolved_settings
     app.add_middleware(CsrfMiddleware)
     app.add_middleware(ApiAuthMiddleware)
-    app.include_router(create_auth_router(RateLimiter()))
+    login_failures = RateLimiter(max_attempts=20, window_s=3600)
+    app.state.login_failure_limiter = login_failures
+    app.include_router(create_auth_router(RateLimiter(), login_failures))
     app.include_router(system.router)
     app.include_router(events.router)
     app.include_router(agents.router)

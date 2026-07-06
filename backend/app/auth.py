@@ -44,6 +44,18 @@ class RateLimiter:
         attempts.append(now)
         return True
 
+    def record(self, key: str) -> None:
+        """Record an occurrence without enforcing the limit."""
+        self._attempts[key].append(time.monotonic())
+
+    def blocked(self, key: str) -> bool:
+        """Check the limit without recording an attempt."""
+        now = time.monotonic()
+        attempts = self._attempts[key]
+        while attempts and now - attempts[0] > self.window_s:
+            attempts.popleft()
+        return len(attempts) >= self.max_attempts
+
 
 def hash_password(password: str) -> str:
     return _hasher.hash(password)
@@ -127,12 +139,20 @@ class ApiAuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-def create_auth_router(rate_limiter: RateLimiter) -> APIRouter:
+def create_auth_router(
+    rate_limiter: RateLimiter, failure_limiter: RateLimiter | None = None
+) -> APIRouter:
     router = APIRouter(prefix="/api/auth")
+    # lockout after 20 FAILED attempts per hour per IP (PHASE_8 Task 8.4)
+    failures = failure_limiter or RateLimiter(max_attempts=20, window_s=3600)
 
     @router.post("/login", status_code=204)
     async def login(payload: LoginRequest, request: Request, response: Response) -> None:
         client_host = request.client.host if request.client else "unknown"
+        if failures.blocked(client_host):
+            raise HTTPException(
+                status_code=429, detail="Locked out after repeated failures"
+            )
         if not rate_limiter.hit(client_host):
             raise HTTPException(status_code=429, detail="Too many login attempts")
 
@@ -143,6 +163,7 @@ def create_auth_router(rate_limiter: RateLimiter) -> APIRouter:
                 )
             ).scalar_one()
             if not verify_password(payload.password, password_hash):
+                failures.record(client_host)
                 raise HTTPException(status_code=401, detail="Invalid password")
 
         # append_event persists AND publishes to live SSE subscribers.
