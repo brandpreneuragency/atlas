@@ -121,7 +121,7 @@ async def test_env_put_and_delete(app_client):
     put_route = respx.put(f"{ADMIN}/api/env").mock(
         return_value=httpx.Response(200, json={"ok": True})
     )
-    del_route = respx.delete(f"{ADMIN}/api/env/FAKE_PROVIDER_KEY").mock(
+    del_route = respx.delete(f"{ADMIN}/api/env").mock(
         return_value=httpx.Response(200, json={"ok": True})
     )
     await _login(app_client)

@@ -126,6 +126,46 @@ async def test_env_list_returns_masked_entries_untouched():
     assert env["OPENROUTER_API_KEY"]["redacted_value"] == "sk-o...61b8"
 
 
+# --- live contract shapes (verified against running Hermes 2026-07-06) ----
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_model_set_sends_scope_main():
+    respx.get(f"{_ADMIN}/").mock(
+        return_value=httpx.Response(200, text=_index_html())
+    )
+    route = respx.post(f"{_ADMIN}/api/model/set").mock(
+        return_value=httpx.Response(200, json={"ok": True})
+    )
+    await HermesAdmin(_ADMIN).model_set("deepseek/deepseek-v4-flash", "nous")
+    import json as _json
+
+    body = _json.loads(route.calls.last.request.content)
+    assert body == {
+        "scope": "main",
+        "model": "deepseek/deepseek-v4-flash",
+        "provider": "nous",
+    }
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_env_delete_uses_body_not_path():
+    respx.get(f"{_ADMIN}/").mock(
+        return_value=httpx.Response(200, text=_index_html())
+    )
+    route = respx.delete(f"{_ADMIN}/api/env").mock(
+        return_value=httpx.Response(200, json={"ok": True, "key": "FAKE_KEY"})
+    )
+    result = await HermesAdmin(_ADMIN).env_delete("FAKE_KEY")
+    assert result["ok"] is True
+    import json as _json
+
+    body = _json.loads(route.calls.last.request.content)
+    assert body == {"key": "FAKE_KEY"}
+
+
 # --- connect error ---------------------------------------------------------
 
 

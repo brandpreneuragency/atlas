@@ -135,8 +135,11 @@ class HermesAdmin:
         return self._require_dict(await self._authed_json("GET", "/api/model/options"))
 
     async def model_set(self, model: str, provider: str) -> dict[str, Any]:
+        # Live contract: scope is required; "main" writes the primary model slot.
         data = await self._authed_json(
-            "POST", "/api/model/set", json={"model": model, "provider": provider}
+            "POST",
+            "/api/model/set",
+            json={"scope": "main", "model": model, "provider": provider},
         )
         return self._require_dict(data)
 
@@ -153,7 +156,8 @@ class HermesAdmin:
         return self._require_dict(data)
 
     async def env_delete(self, key: str) -> dict[str, Any]:
-        data = await self._authed_json("DELETE", f"/api/env/{key}")
+        # Live contract: DELETE /api/env with {"key": ...} body (path form → 405).
+        data = await self._authed_json("DELETE", "/api/env", json={"key": key})
         return self._require_dict(data)
 
     # ---- analytics / logs / gateway ----------------------------------------
