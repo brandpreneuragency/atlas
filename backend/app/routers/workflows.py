@@ -284,3 +284,107 @@ async def webhook_trigger(workflow_id: int, secret: str, request: Request) -> di
     except EnginePaused:
         raise HTTPException(409, detail="paused") from None
     return {"run_id": run_id}
+
+
+def _row_to_run(row: Any) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "workflow_id": row.workflow_id,
+        "status": row.status,
+        "trigger_kind": row.trigger_kind,
+        "trigger_payload": json.loads(row.trigger_payload or "{}"),
+        "dry_run": bool(row.dry_run),
+        "error": row.error,
+        "cost_usd": row.cost_usd,
+        "tokens_in": row.tokens_in,
+        "tokens_out": row.tokens_out,
+        "created_at": row.created_at,
+        "started_at": row.started_at,
+        "finished_at": row.finished_at,
+    }
+
+
+_RUN_COLS = (
+    "id, workflow_id, status, trigger_kind, trigger_payload, dry_run, error, "
+    "cost_usd, tokens_in, tokens_out, created_at, started_at, finished_at"
+)
+
+
+@router.get("/runs")
+async def list_runs(
+    workflow_id: int | None = None,
+    status: str | None = None,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    params: dict[str, Any] = {"limit": min(max(limit, 1), 200)}
+    where: list[str] = []
+    if workflow_id is not None:
+        where.append("workflow_id = :wf")
+        params["wf"] = workflow_id
+    if status is not None:
+        where.append("status = :status")
+        params["status"] = status
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+    async with get_session() as session:
+        result = await session.execute(
+            text(
+                f"SELECT {_RUN_COLS} FROM runs {where_sql} "
+                f"ORDER BY id DESC LIMIT :limit"
+            ),
+            params,
+        )
+        return [_row_to_run(row) for row in result.all()]
+
+
+@router.get("/runs/{run_id}")
+async def get_run(run_id: int) -> dict[str, Any]:
+    async with get_session() as session:
+        row = (
+            await session.execute(
+                text(f"SELECT {_RUN_COLS} FROM runs WHERE id=:id"), {"id": run_id}
+            )
+        ).one_or_none()
+        if row is None:
+            raise HTTPException(404, detail="run not found")
+        steps = (
+            await session.execute(
+                text(
+                    "SELECT id, node_id, node_type, status, input, output, error, "
+                    "cost_usd, started_at, finished_at FROM run_steps "
+                    "WHERE run_id=:id ORDER BY id"
+                ),
+                {"id": run_id},
+            )
+        ).all()
+    run = _row_to_run(row)
+    run["steps"] = [
+        {
+            "id": s.id,
+            "node_id": s.node_id,
+            "node_type": s.node_type,
+            "status": s.status,
+            "input": json.loads(s.input or "{}"),
+            "output": json.loads(s.output or "{}"),
+            "error": s.error,
+            "cost_usd": s.cost_usd,
+            "started_at": s.started_at,
+            "finished_at": s.finished_at,
+        }
+        for s in steps
+    ]
+    return run
+
+
+@router.post("/runs/{run_id}/cancel", status_code=204)
+async def cancel_run(run_id: int, request: Request) -> None:
+    async with get_session() as session:
+        row = (
+            await session.execute(
+                text("SELECT id, status FROM runs WHERE id=:id"), {"id": run_id}
+            )
+        ).one_or_none()
+    if row is None:
+        raise HTTPException(404, detail="run not found")
+    if row.status in ("succeeded", "failed", "cancelled", "budget_exceeded"):
+        raise HTTPException(409, detail=f"run already {row.status}")
+    await request.app.state.engine.cancel(run_id)

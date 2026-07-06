@@ -241,28 +241,6 @@ def test_provenance_ttl_expiry():
 # --- webhook + manual routes ------------------------------------------------------
 
 
-@pytest_asyncio.fixture
-async def wf_client(tmp_path):
-    from httpx import ASGITransport, AsyncClient
-
-    from app.main import create_app
-
-    jail = tmp_path / "atlas"
-    jail.mkdir()
-    settings = Settings(
-        data_dir=tmp_path, atlas_root=jail, password="testpw", secret_key="s",
-        mock_hermes=True, dev_mode=True, static_dir=None,
-    )
-    app = create_app(settings)
-    async with app.router.lifespan_context(app):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://t"
-        ) as client:
-            login = await client.post("/api/auth/login", json={"password": "testpw"})
-            assert login.status_code == 204
-            yield client, app
-
-
 async def _create_wf(client, graph):
     response = await client.post(
         "/api/workflows", json={"name": "hookwf", "graph": graph}, headers=CSRF

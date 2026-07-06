@@ -75,3 +75,26 @@ async def stream_client(tmp_path):
     finally:
         server.should_exit = True
         thread.join(timeout=10)
+
+@pytest_asyncio.fixture
+async def wf_client(tmp_path):
+    """Authenticated client + app with a jailed atlas_root (workflow tests)."""
+    jail = tmp_path / "atlas"
+    jail.mkdir()
+    settings = Settings(
+        data_dir=tmp_path,
+        atlas_root=jail,
+        password="testpw",
+        secret_key="s",
+        mock_hermes=True,
+        dev_mode=True,
+        static_dir=None,
+    )
+    app = create_app(settings)
+    async with app.router.lifespan_context(app):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://t"
+        ) as client:
+            login = await client.post("/api/auth/login", json={"password": "testpw"})
+            assert login.status_code == 204
+            yield client, app
