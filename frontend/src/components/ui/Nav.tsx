@@ -2,9 +2,10 @@ import { NavLink } from 'react-router-dom'
 
 const items = [
   ['/', 'Mission Control'],
+  ['/agent', 'Agent'],
+  ['/sessions', 'Sessions'],
   ['/automation', 'Automation'],
   ['/files', 'Files'],
-  ['/agent', 'Agent'],
   ['/models', 'Models'],
   ['/inbox', 'Inbox'],
   ['/settings', 'Settings'],

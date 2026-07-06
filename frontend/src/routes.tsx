@@ -3,8 +3,11 @@ import { Navigate } from 'react-router-dom'
 import type { RouteObject } from 'react-router-dom'
 
 import { Shell } from './components/ui/Shell'
+import { Agent } from './pages/Agent'
 import { Login } from './pages/Login'
 import { MissionControl } from './pages/MissionControl'
+import { SessionDetail } from './pages/SessionDetail'
+import { Sessions } from './pages/Sessions'
 
 function Placeholder({ title, phase }: { title: string; phase: string }) {
   return (
@@ -49,7 +52,23 @@ export const routes: RouteObject[] = [
     path: '/agent',
     element: (
       <ShellPage>
-        <Placeholder title="Agent" phase="Phase 2" />
+        <Agent />
+      </ShellPage>
+    ),
+  },
+  {
+    path: '/sessions',
+    element: (
+      <ShellPage>
+        <Sessions />
+      </ShellPage>
+    ),
+  },
+  {
+    path: '/sessions/:sid',
+    element: (
+      <ShellPage>
+        <SessionDetail />
       </ShellPage>
     ),
   },
