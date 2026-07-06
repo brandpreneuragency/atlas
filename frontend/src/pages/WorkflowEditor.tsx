@@ -4,10 +4,15 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { api, ApiError } from '../api/client'
 import type { Workflow } from '../api/types'
+import type { AtlasEvent } from '../api/types'
 import { Canvas } from '../components/flow/Canvas'
 import { ConfigPanel, extractInvalidNodeIds } from '../components/flow/ConfigPanel'
 import { NodePalette } from '../components/flow/NodePalette'
+import { RunPanel } from '../components/flow/RunPanel'
+import { applyRunEvent } from '../components/flow/runStates'
+import type { RunNodeStates } from '../components/flow/runStates'
 import { useGraph } from '../components/flow/useGraph'
+import { openAtlasSse } from '../lib/sse'
 
 function EditorInner({ workflow }: { workflow: Workflow }) {
   const graph = useGraph(workflow.graph)
@@ -16,7 +21,30 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [shellAllowlist, setShellAllowlist] = useState<string[]>([])
+  const [runStates, setRunStates] = useState<RunNodeStates>({})
+  const [refreshKey, setRefreshKey] = useState(0)
   const navigate = useNavigate()
+
+  // live node states from the global SSE feed (only this workflow's events)
+  useEffect(() => {
+    const sse = openAtlasSse({
+      url: '/api/events/stream',
+      onEvent: (eventJson) => {
+        try {
+          const event = JSON.parse(eventJson) as AtlasEvent
+          if (event.workflow_id !== workflow.id) return
+          if (event.kind === 'run.started') setRunStates({})
+          setRunStates((prev) => applyRunEvent(prev, event))
+          if (event.kind === 'run.finished' || event.kind === 'run.failed') {
+            setRefreshKey((k) => k + 1)
+          }
+        } catch {
+          // malformed frame — ignore
+        }
+      },
+    })
+    return () => sse.close()
+  }, [workflow.id])
 
   useEffect(() => {
     // best effort: allowlist shown in the shell.command form
@@ -71,6 +99,9 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
   }, [graph, name, workflow])
 
   const selectedNode = graph.nodes.find((n) => n.id === selected) ?? null
+  const displayNodes = graph.nodes.map((n) =>
+    runStates[n.id] ? { ...n, data: { ...n.data, runState: runStates[n.id] } } : n,
+  )
 
   return (
     <div className="flex h-full flex-col gap-3" data-testid="workflow-editor">
@@ -115,7 +146,7 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
       <div className="flex min-h-0 flex-1 gap-3">
         <NodePalette />
         <Canvas
-          nodes={graph.nodes}
+          nodes={displayNodes}
           edges={graph.edges}
           setNodes={graph.setNodes}
           setEdges={graph.setEdges}
@@ -135,6 +166,7 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
             onClose={() => setSelected(null)}
           />
         )}
+        <RunPanel workflowId={workflow.id} refreshKey={refreshKey} />
       </div>
     </div>
   )

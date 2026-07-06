@@ -286,7 +286,12 @@ class Engine:
                 )
                 step_id = int(result.scalar_one())
                 await session.commit()
-            await emit("run.step_started", f"step {node.id} ({node.type}) started")
+            await emit(
+                "run.step_started",
+                f"step {node.id} ({node.type}) started",
+                node_id=node.id,
+                node_type=node.type,
+            )
 
             nctx = NodeCtx(
                 node_id=node.id,
@@ -309,7 +314,12 @@ class Engine:
                 output = await NODE_EXECUTORS[node.type](nctx)
             except NodeError as exc:
                 await self._finish_step(step_id, "failed", error=str(exc))
-                await emit("run.step_finished", f"step {node.id} failed: {exc}")
+                await emit(
+                    "run.step_finished",
+                    f"step {node.id} failed: {exc}",
+                    node_id=node.id,
+                    status="failed",
+                )
                 await self._fail_run(run_id, workflow_id, f"step {node.id}: {exc}")
                 return
             finally:
@@ -327,12 +337,18 @@ class Engine:
                     "run.waiting_approval",
                     f"run waiting for approval: {output.get('message', '')}",
                     approval_id=output.get("approval_id"),
+                    node_id=node.id,
                 )
                 return  # park; resume() re-enters
 
             ctx[node.id] = output
             await self._finish_step(step_id, "succeeded", output=output)
-            await emit("run.step_finished", f"step {node.id} succeeded")
+            await emit(
+                "run.step_finished",
+                f"step {node.id} succeeded",
+                node_id=node.id,
+                status="succeeded",
+            )
 
             usage = output.get("usage") if isinstance(output, dict) else None
             if isinstance(usage, dict):
