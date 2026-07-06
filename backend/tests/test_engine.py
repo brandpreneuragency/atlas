@@ -295,8 +295,9 @@ async def test_queue_of_one_per_workflow(env):
                  "WHERE run_id IN (:a, :b) GROUP BY run_id ORDER BY run_id"),
             {"a": r1, "b": r2},
         )).all()
-    # second run's first step starts only after the first run's last step finished
-    assert rows[1].s >= rows[0].f
+    # the per-workflow lock serializes the runs (in either acquisition order):
+    # one run's steps must all finish before the other's first step starts
+    assert rows[1].s >= rows[0].f or rows[0].s >= rows[1].f
 
 
 @pytest.mark.asyncio

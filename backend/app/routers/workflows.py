@@ -6,15 +6,17 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import text
 
 from app.auth import require_session
 from app.db import get_session
+from app.engine.engine import EnginePaused
 from app.engine.schemas import Graph, validate_graph
 
 router = APIRouter(prefix="/api", dependencies=[Depends(require_session)])
+hooks_router = APIRouter(prefix="/api")  # webhook triggers: secret-authed, no session
 
 
 def _now_iso() -> str:
@@ -35,6 +37,11 @@ class EnableIn(BaseModel):
 
 class RollbackIn(BaseModel):
     version: int
+
+
+class RunIn(BaseModel):
+    dry_run: bool = False
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
 def _parse_and_validate(graph_dict: dict[str, Any]) -> Graph:
@@ -230,3 +237,50 @@ async def rollback_workflow(workflow_id: int, body: RollbackIn) -> dict[str, Any
         await _snapshot_version(session, workflow_id, new_version, target.graph)
         await session.commit()
         return _row_to_workflow(await _fetch_workflow(session, workflow_id))
+
+
+@router.post("/workflows/{workflow_id}/run")
+async def run_workflow(workflow_id: int, body: RunIn, request: Request) -> dict[str, Any]:
+    async with get_session() as session:
+        await _fetch_workflow(session, workflow_id)
+    engine = request.app.state.engine
+    try:
+        run_id = await engine.submit(
+            workflow_id, "manual", body.payload, dry_run=body.dry_run
+        )
+    except EnginePaused:
+        raise HTTPException(409, detail="paused") from None
+    return {"run_id": run_id}
+
+
+@hooks_router.post("/hooks/{workflow_id}/{secret}", status_code=202)
+async def webhook_trigger(workflow_id: int, secret: str, request: Request) -> dict[str, Any]:
+    async with get_session() as session:
+        result = await session.execute(
+            text("SELECT graph FROM workflows WHERE id=:id"), {"id": workflow_id}
+        )
+        row = result.one_or_none()
+    if row is None:
+        raise HTTPException(404, detail="not found")
+    expected = None
+    for node in json.loads(row.graph).get("nodes", []):
+        if node.get("type") == "trigger.webhook":
+            expected = node.get("config", {}).get("secret")
+            break
+    if expected is None or secret != expected:
+        raise HTTPException(404, detail="not found")
+
+    triggers = request.app.state.triggers
+    if not triggers.hook_limiter.allow(workflow_id):
+        raise HTTPException(429, detail="rate limited")
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    engine = request.app.state.engine
+    try:
+        run_id = await engine.submit(workflow_id, "webhook", {"body": body})
+    except EnginePaused:
+        raise HTTPException(409, detail="paused") from None
+    return {"run_id": run_id}
