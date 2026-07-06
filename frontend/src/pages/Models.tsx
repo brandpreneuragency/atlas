@@ -3,13 +3,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
 import { ConfirmDialog } from '../components/files/ConfirmDialog'
 
+// Live Hermes (v0.16.0) returns providers as an array of objects; older/mocked
+// shapes use a name→models record. Both are accepted.
+type ProviderOption = { slug?: string; name?: string; models?: string[] }
 type ModelInfo = {
   current: {
     model: string
     provider: string
     capabilities?: { context_window?: number }
   }
-  options: { providers?: Record<string, string[]> }
+  options: { providers?: ProviderOption[] | Record<string, string[]> }
 }
 type EnvEntry = {
   is_set?: boolean
@@ -123,9 +126,17 @@ export function Models() {
   }
 
   const allModels = useMemo(() => {
-    const providers = info?.options.providers ?? {}
+    const providers = info?.options?.providers ?? {}
+    if (Array.isArray(providers)) {
+      return providers.flatMap((p) =>
+        (p.models ?? []).map((model) => ({
+          provider: p.slug ?? p.name ?? 'unknown',
+          model,
+        })),
+      )
+    }
     return Object.entries(providers).flatMap(([provider, models]) =>
-      models.map((model) => ({ provider, model })),
+      (Array.isArray(models) ? models : []).map((model) => ({ provider, model })),
     )
   }, [info])
 

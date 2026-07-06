@@ -18,6 +18,25 @@ const MODEL = {
     },
   },
 }
+// live Hermes v0.16.0 shape: providers is an ARRAY of objects (regression: M.map crash)
+const MODEL_LIVE_SHAPE = {
+  current: {
+    model: 'stepfun/step-3.7-flash:free',
+    provider: 'nous',
+    capabilities: { context_window: 256000 },
+  },
+  options: {
+    providers: [
+      {
+        slug: 'nous',
+        name: 'Nous Portal',
+        is_current: true,
+        models: ['openai/gpt-5.5', 'stepfun/step-3.7-flash:free'],
+        total_models: 2,
+      },
+    ],
+  },
+}
 const ENV = {
   OPENROUTER_API_KEY: {
     is_set: true,
@@ -77,6 +96,26 @@ describe('Models page', () => {
       screen.getByRole('heading', { name: 'openrouter' }),
     ).toBeInTheDocument()
     expect(screen.getByText('stepfun/step-3.7-flash:free')).toBeInTheDocument()
+  })
+
+  it('renders provider-array shape from live Hermes without crashing', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.startsWith('/api/hermes/model') && init?.method !== 'POST')
+        return jsonResponse(MODEL_LIVE_SHAPE)
+      if (url.startsWith('/api/settings/model-prefs')) return jsonResponse(prefs)
+      if (url.startsWith('/api/hermes/env')) return jsonResponse(ENV)
+      return jsonResponse({}, 200)
+    })
+    render(<Models />)
+    const card = await screen.findByTestId('current-model-card')
+    expect(
+      within(card).getByText('stepfun/step-3.7-flash:free'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'nous' })).toBeInTheDocument()
+    expect(
+      screen.getByTestId('model-row-openai/gpt-5.5'),
+    ).toBeInTheDocument()
   })
 
   it('use-this-model posts model + provider', async () => {

@@ -37,7 +37,16 @@ Each job:
 ```json
 {"model":"gpt-5.5","provider":"openai-codex","auto_context_length":272000,"effective_context_length":272000,"capabilities":{"supports_tools":true,"supports_vision":true,"supports_reasoning":true,"context_window":1050000,"max_output_tokens":128000,"model_family":"gpt"}}
 ```
-Also: `GET /api/model/options`, `GET /api/model/auxiliary`, `POST /api/model/set`.
+Also: `GET /api/model/auxiliary`, `POST /api/model/set`.
+
+## GET /api/model/options  (verified live 2026-07-07)
+`providers` is an **ARRAY of provider objects**, NOT a name→models record:
+```json
+{"providers":[{"slug":"nous","name":"Nous Portal","is_current":true,"is_user_defined":false,
+  "models":["anthropic/claude-fable-5","openai/gpt-5.5","stepfun/step-3.7-flash:free", "..."],
+  "total_models":28,"source":"hermes","pricing":{"...":{}},"free_tier":true,"unavailable_models":["..."]}]}
+```
+Frontend Models page must map `providers[].models` keyed by `providers[].slug` (this mismatch caused the live "M.map is not a function" crash on /models).
 
 ## GET /api/analytics/usage
 ```json
