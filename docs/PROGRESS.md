@@ -4,7 +4,7 @@
 > Resume command: **"Read CLAUDE.md, docs/PROGRESS.md, and docs/MASTER_PLAN.md. Continue with the next phase. Run acceptance criteria when done."**
 
 ## Current
-Phase 2 — COMPLETE (Task 2.6 deployed + live-verified 2026-07-06). Next: Phase 3. One carried-over item: live chat replies are blocked **inside Hermes** ("No access token found for Nous Portal login") — user must run `hermes model` re-auth in the hermes container; the Atlas pipeline itself (session create → SSE relay → thread row → feed event) is verified working end-to-end.
+Phase 2 — COMPLETE (Task 2.6 deployed + live-verified 2026-07-06; user re-authed Hermes Nous Portal, live chat "Reply PONG" streamed `event: token / data: PONG` → `done {"thread_id": 2}`). Next: Phase 3.
 
 ## Done
 - [x] Planning: design spec + master plan + phases 0–8 + execution playbook written and approved (2026-07-06).
@@ -54,4 +54,4 @@ Phase 2 — COMPLETE (Task 2.6 deployed + live-verified 2026-07-06). Next: Phase
 - 2026-07-06: compose v1 on the VPS hits `KeyError: 'ContainerConfig'` when recreating containers built by BuildKit. Deploy recipe: `docker-compose build` → `docker rm -f atlas_control` → `docker-compose up -d`.
 
 ## DECISION NEEDED
-- **Hermes chat model auth expired (not an Atlas bug):** live chat replies fail inside Hermes with `No access token found for Nous Portal login. Run 'hermes model' to re-authenticate.` Interactive re-auth must be done by the user in the hermes container (do NOT restart the container — Phase-0 restart-safety warning still applies). Until then, acceptance criterion "chat streams a real Hermes reply" is verified up to Hermes' own model call: Atlas correctly creates the session, relays the stream, surfaces the error event, and records the thread + feed event.
+- (none) — 2026-07-06: Hermes Nous Portal re-auth done by user; live chat verified (PONG streamed, thread_id 2).
