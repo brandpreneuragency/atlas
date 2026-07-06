@@ -1,0 +1,54 @@
+from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel
+from sqlalchemy import text
+
+from app.auth import require_session
+from app.db import get_session
+
+router = APIRouter(prefix="/api")
+
+
+class KillSwitchRequest(BaseModel):
+    paused: bool
+
+
+async def _paused() -> bool:
+    async with get_session() as session:
+        value = (
+            await session.execute(
+                text("SELECT value FROM settings WHERE key = 'global_pause'")
+            )
+        ).scalar_one_or_none()
+    return value == "1"
+
+
+@router.get("/health")
+async def health(request: Request) -> dict[str, object]:
+    settings = request.app.state.settings
+    hermes = {"runs_api": "mock"} if settings.mock_hermes else {"runs_api": "unknown"}
+    return {"status": "ok", "db": "ok", "hermes": hermes, "version": "0.1.0"}
+
+
+@router.get("/me", dependencies=[Depends(require_session)])
+async def me() -> dict[str, bool]:
+    return {"authenticated": True}
+
+
+@router.get("/killswitch", dependencies=[Depends(require_session)])
+async def get_killswitch() -> dict[str, bool]:
+    return {"paused": await _paused()}
+
+
+@router.post("/killswitch", dependencies=[Depends(require_session)])
+async def set_killswitch(payload: KillSwitchRequest) -> dict[str, bool]:
+    value = "1" if payload.paused else "0"
+    async with get_session() as session:
+        await session.execute(
+            text(
+                "INSERT INTO settings(key, value) VALUES ('global_pause', :value) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+            ),
+            {"value": value},
+        )
+        await session.commit()
+    return {"paused": payload.paused}
