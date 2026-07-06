@@ -4,7 +4,7 @@
 > Resume command: **"Read CLAUDE.md, docs/PROGRESS.md, and docs/MASTER_PLAN.md. Continue with the next phase. Run acceptance criteria when done."**
 
 ## Current
-Phase 0 — DONE (2026-07-06). Acceptance criteria passed; ready for Phase 1.
+Phase 1 — IN PROGRESS (Task 1.1 complete; Task 1.2 next).
 
 ## Done
 - [x] Planning: design spec + master plan + phases 0–8 + execution playbook written and approved (2026-07-06).
@@ -13,6 +13,7 @@ Phase 0 — DONE (2026-07-06). Acceptance criteria passed; ready for Phase 1.
 - [x] Task 0.3 — full Hermes API contract captured to `02_dev_plan/phase0_captures/` (hermes-runs-contract.md, hermes-admin-contract.md, hermes-contract.json). Derived runs API from source to avoid burning the 429-limited quota.
 - [x] Task 0.4 — Caddy/domain: site configured for `atlas.brandpreneur.net`; Caddy reloaded; Let’s Encrypt certificate issued; HTTPS returns expected 502.
 - [x] Task 0.5 — repo scaffold created at `C:\dev\atlas-control`; plan docs copied; sanitized Phase-0 fixtures copied to `backend/tests/fixtures/`; backend/frontend sanity checks pass; pushed to `https://github.com/brandpreneuragency/atlas`; server clone exists at `/home/admin/atlas-control`.
+- [x] Task 1.1 — Settings + DB core: `Settings`, SQLite async engine/session, WAL/foreign-key pragmas, migration runner, and `001_core.sql` implemented. Checks: `uv run ruff check .`, `uv run mypy app`, `uv run pytest -q` all pass.
 
 ## Phase-0 records (CAPTURED — later phases depend on these)
 - **Run POST payload:** `POST /v1/runs {"input": "<prompt>"}` → 202 `{"run_id":"run_<hex>","status":"started"}`. (`input` required; may be message-list.)
