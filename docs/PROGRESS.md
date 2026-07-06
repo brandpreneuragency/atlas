@@ -4,7 +4,7 @@
 > Resume command: **"Read CLAUDE.md, docs/PROGRESS.md, and docs/MASTER_PLAN.md. Continue with the next phase. Run acceptance criteria when done."**
 
 ## Current
-Phase 1 — IN PROGRESS (Tasks 1.1–1.5 complete; Task 1.6 code prepared; blocked on server `.env` creation with user-chosen dashboard password).
+Phase 2 — IN PROGRESS (Card 2.A / Tasks 2.1–2.3 complete; Card 2.B pending). Phase 1 deploy (Task 1.6) still blocked on server `.env` creation with user-chosen dashboard password.
 
 ## Done
 - [x] Planning: design spec + master plan + phases 0–8 + execution playbook written and approved (2026-07-06).
@@ -18,6 +18,9 @@ Phase 1 — IN PROGRESS (Tasks 1.1–1.5 complete; Task 1.6 code prepared; block
 - [x] Task 1.3 — `HermesClient.health()` and `capabilities()` implemented with bearer auth, 10s default timeout, `HermesUnavailable` translation, and `/api/health` real-mode degradation. Checks: `uv run ruff check .`, `uv run mypy app`, `uv run pytest -q` all pass.
 - [x] Task 1.4 — `/hermes/{path}` authenticated reverse-proxy stopgap implemented for HTTP methods with hop-by-hop header stripping and websocket 501 limitation. Checks: `uv run ruff check .`, `uv run mypy app`, `uv run pytest -q` all pass.
 - [x] Task 1.5 — React SPA shell, login form, typed API client, Mission Control health card, placeholders, and Vite dev proxy implemented. Checks: `pnpm exec tsc --noEmit`, `pnpm exec eslint src`, `pnpm exec vitest run`, `pnpm build` all pass.
+- [x] Task 2.1 — Event bus: `app/events.py` (`Broadcaster` set of `asyncio.Queue(maxsize=500)` with slow-consumer drop, `append_event(kind, source, summary, **payload)` → INSERT + publish) and `app/routers/events.py` (`GET /api/events?limit&before_id&kind` paginated newest-first; `GET /api/events/stream` SSE via `sse-starlette` emitting `event: atlas` + `data: {json}`, 20s heartbeat). The route subscribes eagerly so events appended between headers and first client pull are not lost. Tests: `tests/test_events.py` (3). Checks: ruff, mypy, pytest green (commit fde892b).
+- [x] Task 2.2 — Full `HermesClient` per §7 (create_run/run_status/run_events/stop_run/approve_run/sessions/session_messages/create_session/chat_stream) + full `MockHermes` per §10. SSE parser splits on `\n\n`, parses `data:` JSON, ignores comments/heartbeats, tolerates unknown event types, ends on terminal `run.completed`/`run.failed`/`run.cancelled`. `test_mock_matches_interface` asserts method-name + `inspect.signature` parity. Tests: `tests/test_hermes_runs.py` (13). Checks green (commit c6e67da).
+- [x] Task 2.3 — `HermesAdmin` (:9119) with `_token()` (regex `__HERMES_SESSION_TOKEN__\s*=\s*"([A-Za-z0-9_-]+)"` over index HTML, cached), `_authed_request` single retry-on-401 wrapper, full §7 surface (cron CRUD/pause/resume/trigger/delete, model info/options/set, env list/put/delete, analytics usage/models, logs, gateway_restart). `/api/env` masked values returned untouched. Tests: `tests/test_hermes_admin.py` (7) including `tests/fixtures/dashboard_index.html` sanitized snippet. Checks green (commit 299f0ac).
 
 ## Phase-0 records (CAPTURED — later phases depend on these)
 - **Run POST payload:** `POST /v1/runs {"input": "<prompt>"}` → 202 `{"run_id":"run_<hex>","status":"started"}`. (`input` required; may be message-list.)
@@ -29,6 +32,7 @@ Phase 1 — IN PROGRESS (Tasks 1.1–1.5 complete; Task 1.6 code prepared; block
 - **Caddyfile mount:** `/home/admin/tabs/Caddyfile` → `/etc/caddy/Caddyfile` (Task 0.4 Step 1 verified).
 
 ## Decisions / deviations
+- 2026-07-06: **SSE unit test transport** — httpx `ASGITransport.handle_async_request` awaits the entire ASGI app to completion and buffers the full body, so it CANNOT stream an infinite SSE response (the call hangs indefinitely, no middleware involved). To honor the Phase-2 spec ("use `client.stream('GET', ...)` and read one `data:` line with a 5s timeout") a `stream_client` conftest fixture spins a real uvicorn server on an ephemeral port and uses httpx's normal HTTP transport, which streams chunks as they arrive. Non-streaming tests keep the fast `ASGITransport`-based `app_client` fixture. Verified: a single `BaseHTTPMiddleware` + terminating SSE works through `ASGITransport`, but a stacked/infinite stream does not — so the limitation is httpx, not Starlette middleware.
 - 2026-07-06: Derived the runs API contract from `api_server.py` source instead of a live run — the model has an active 429 usage-limit and source is authoritative. No quota spent.
 - 2026-07-06: `/api/cron/jobs` returns a **bare JSON array**, not `{"jobs":[]}`. Adapter parses a list.
 - 2026-07-06: Only **ONE** Hermes cron job exists now (`App Store Market Scout`, paused, 429). The stale runtime doc's second "Digest Append" job is gone. Phase 6 migration proof targets the single job.
