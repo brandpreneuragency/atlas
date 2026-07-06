@@ -3,7 +3,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.auth import ApiAuthMiddleware, CsrfMiddleware, RateLimiter, bootstrap_password, create_auth_router
 from app.config import Settings, get_settings
@@ -57,6 +59,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     static_dir = resolved_settings.static_dir
     if static_dir is not None and Path(static_dir).exists():
+        index_html = static_dir / "index.html"
+
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def spa_fallback(full_path: str) -> FileResponse:
+            # SPA fallback: real files under static_dir are served as-is so that
+            # assets (/assets/*.js, /favicon.svg, ...) keep working; any other
+            # (non-api, non-hermes) path returns index.html for client-side routing.
+            if full_path.startswith("api") or full_path.startswith("hermes"):
+                raise StarletteHTTPException(status_code=404, detail="Not Found")
+            candidate = static_dir / full_path
+            if candidate.is_file():
+                return FileResponse(candidate)
+            if index_html.is_file():
+                return FileResponse(index_html)
+            raise StarletteHTTPException(status_code=404, detail="Not Found")
+
         app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
     return app
 
