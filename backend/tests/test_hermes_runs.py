@@ -102,7 +102,22 @@ async def test_approve_run_hits_right_path():
     )
     assert route.called
     body = json.loads(respx.calls.last.request.content)
-    assert body == {"approval_id": "appr-1", "decision": "approved"}
+    # live contract (verified 2026-07-06): {"choice": once|session|always|deny};
+    # approved → once, rejected → deny. approval_id is not part of the API.
+    assert body == {"choice": "once"}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_approve_run_rejected_maps_to_deny():
+    respx.post("http://hermes:8642/v1/runs/run_deadbeef/approval").mock(
+        return_value=httpx.Response(204)
+    )
+    await HermesClient("http://hermes:8642", "testkey").approve_run(
+        "run_deadbeef", "", "rejected"
+    )
+    body = json.loads(respx.calls.last.request.content)
+    assert body == {"choice": "deny"}
 
 
 # --- run_status ------------------------------------------------------------

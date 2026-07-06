@@ -119,6 +119,10 @@ class HermesClient:
     async def approve_run(
         self, run_id: str, approval_id: str, decision: str
     ) -> None:
+        # Live contract (2026-07-06): body is {"choice": once|session|always|deny}.
+        # approval_id is not part of the API (kept in the signature per §7 and
+        # for MockHermes parity). Our decisions map: approved→once, rejected→deny.
+        choice = {"approved": "once", "rejected": "deny"}.get(decision, decision)
         headers = {"Authorization": f"Bearer {self.api_key}"}
         try:
             async with httpx.AsyncClient(
@@ -126,7 +130,7 @@ class HermesClient:
             ) as client:
                 response = await client.post(
                     f"/v1/runs/{run_id}/approval",
-                    json={"approval_id": approval_id, "decision": decision},
+                    json={"choice": choice},
                 )
                 response.raise_for_status()
         except httpx.HTTPError as exc:
