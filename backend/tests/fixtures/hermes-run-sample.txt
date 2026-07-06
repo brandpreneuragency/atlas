@@ -1,0 +1,9 @@
+data: {"event":"tool.started","run_id":"run_deadbeef","timestamp":1783300001,"tool":"web_search","preview":"query..."}
+
+data: {"event":"tool.completed","run_id":"run_deadbeef","timestamp":1783300004,"tool":"web_search","duration":2.9,"error":false}
+
+data: {"event":"reasoning.available","run_id":"run_deadbeef","timestamp":1783300006,"text":"thinking..."}
+
+data: {"event":"run.completed","run_id":"run_deadbeef","timestamp":1783300012,"output":"PONG","usage":{"input_tokens":120,"output_tokens":3,"total_tokens":123}}
+
+: stream closed
