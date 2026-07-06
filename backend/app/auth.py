@@ -16,6 +16,7 @@ from starlette.responses import JSONResponse
 
 from app.config import Settings
 from app.db import get_session
+from app.events import append_event
 
 COOKIE_NAME = "atlas_session"
 SESSION_MAX_AGE_S = 7 * 24 * 60 * 60
@@ -143,13 +144,9 @@ def create_auth_router(rate_limiter: RateLimiter) -> APIRouter:
             ).scalar_one()
             if not verify_password(payload.password, password_hash):
                 raise HTTPException(status_code=401, detail="Invalid password")
-            await session.execute(
-                text(
-                    "INSERT INTO events(ts, kind, source, payload) "
-                    "VALUES (datetime('now'), 'system.login', 'auth', '{}')"
-                )
-            )
-            await session.commit()
+
+        # append_event persists AND publishes to live SSE subscribers.
+        await append_event("system.login", "auth", "Signed in")
 
         settings: Settings = request.app.state.settings
         response.set_cookie(

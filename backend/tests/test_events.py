@@ -43,6 +43,20 @@ async def test_append_event_persists_and_broadcasts(app_client):
 
 
 @pytest.mark.asyncio
+async def test_login_event_is_broadcast_live(app_client):
+    # Acceptance: the live feed shows system.login within 2s of logging in,
+    # so the login handler must go through append_event (persist + publish).
+    queue = broadcaster.subscribe()
+    try:
+        await _login(app_client)
+        received = await asyncio.wait_for(queue.get(), timeout=2.0)
+        assert received["kind"] == "system.login"
+        assert received["source"] == "auth"
+    finally:
+        broadcaster.unsubscribe(queue)
+
+
+@pytest.mark.asyncio
 async def test_events_list_pagination(app_client):
     await _login(app_client)
 
