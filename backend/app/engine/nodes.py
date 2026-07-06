@@ -77,6 +77,8 @@ async def _exec_hermes_task(nctx: NodeCtx) -> dict[str, Any]:
                             hermes_run_id=run_id,
                             event=event,
                         )
+                    if kind == "approval.request":
+                        await _create_hermes_approval(nctx, run_id, event)
                     if kind in ("run.completed", "run.failed", "run.cancelled"):
                         if kind != "run.completed":
                             raise NodeError(event.get("error") or f"hermes {kind}")
@@ -97,6 +99,49 @@ async def _exec_hermes_task(nctx: NodeCtx) -> dict[str, Any]:
         except Exception as exc:  # connection/protocol errors are retryable
             last_error = str(exc) or type(exc).__name__
     raise NodeError(last_error)
+
+
+async def _create_hermes_approval(
+    nctx: NodeCtx, hermes_run_id: str, event: dict[str, Any]
+) -> None:
+    """Record a Hermes-side approval request (PHASE_7 Task 7.2).
+
+    ``external_ref`` encodes ``"<hermes_run_id>|<hermes_approval_id>"`` so the
+    approvals router can call ``HermesClient.approve_run`` on resolve (the §4
+    schema has no separate column for the Hermes approval id).
+    """
+    from app.db import get_session
+
+    message = (
+        str(event.get("message") or event.get("preview") or "")
+        or f"Hermes run {hermes_run_id} requests approval"
+    )
+    external_ref = f"{hermes_run_id}|{event.get('approval_id', '')}"
+    async with get_session() as session:
+        result = await session.execute(
+            text(
+                "INSERT INTO approvals(run_id, step_id, kind, external_ref, message, "
+                "status, requested_at) "
+                "VALUES (:run_id, :step_id, 'hermes_run', :ref, :message, 'pending', :now) "
+                "RETURNING id"
+            ),
+            {
+                "run_id": nctx.run_id,
+                "step_id": nctx.step_id,
+                "ref": external_ref,
+                "message": message,
+                "now": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        approval_id = result.scalar_one()
+        await session.commit()
+    if nctx.emit is not None:
+        await nctx.emit(
+            "approval.requested",
+            f"hermes approval requested: {message}",
+            approval_id=approval_id,
+            hermes_run_id=hermes_run_id,
+        )
 
 
 async def _exec_file_op(nctx: NodeCtx) -> dict[str, Any]:

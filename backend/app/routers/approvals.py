@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -10,6 +11,7 @@ from sqlalchemy import text
 
 from app.auth import require_session
 from app.db import get_session
+from app.events import append_event
 
 router = APIRouter(prefix="/api", dependencies=[Depends(require_session)])
 
@@ -64,8 +66,34 @@ async def resolve_approval(
     if row.status != "pending":
         raise HTTPException(409, detail=f"approval already {row.status}")
 
-    # engine.resume resolves the approval row and continues the run
-    await request.app.state.engine.resume(row.run_id, body.decision)
+    if row.kind == "hermes_run":
+        # external_ref encodes "<hermes_run_id>|<hermes_approval_id>"
+        hermes_run_id, _, hermes_approval_id = (row.external_ref or "").partition("|")
+        await request.app.state.engine.hermes().approve_run(
+            hermes_run_id, hermes_approval_id, body.decision
+        )
+        async with get_session() as session:
+            await session.execute(
+                text(
+                    "UPDATE approvals SET status=:d, resolved_at=:now, "
+                    "resolved_via='api' WHERE id=:id"
+                ),
+                {
+                    "d": body.decision,
+                    "now": datetime.now(timezone.utc).isoformat(),
+                    "id": approval_id,
+                },
+            )
+            await session.commit()
+        await append_event(
+            "approval.resolved",
+            "api",
+            f"hermes approval {body.decision}",
+            run_id=row.run_id,
+        )
+    else:
+        # engine.resume resolves the approval row and continues the run
+        await request.app.state.engine.resume(row.run_id, body.decision)
     async with get_session() as session:
         updated = (
             await session.execute(

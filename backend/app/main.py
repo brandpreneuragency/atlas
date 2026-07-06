@@ -35,6 +35,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             yield
         finally:
             await triggers.stop()
+            await wf_engine.shutdown()
             await engine.dispose()
 
     app = FastAPI(title="ATLAS Control", lifespan=lifespan)

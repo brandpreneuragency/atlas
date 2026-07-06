@@ -50,8 +50,13 @@ class Engine:
         self._wf_locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._tasks: dict[int, asyncio.Task[None]] = {}
         self._active_hermes: dict[int, tuple[Any, str]] = {}
+        self._expiry_task: asyncio.Task[None] | None = None
 
     # ------------------------------------------------------------------ helpers
+
+    def hermes(self) -> Any:
+        """A fresh adapter from the configured factory (used by routers)."""
+        return self._hermes_factory()
 
     def _wf_lock(self, workflow_id: int) -> asyncio.Lock:
         return self._wf_locks[workflow_id]
@@ -126,6 +131,7 @@ class Engine:
                 {"now": _now_iso()},
             )
             await session.commit()
+        self._expiry_task = asyncio.create_task(self._expiry_loop())
         for row in stuck:
             await append_event(
                 "run.failed",
@@ -339,6 +345,9 @@ class Engine:
                     approval_id=output.get("approval_id"),
                     node_id=node.id,
                 )
+                await self._notify_gate(
+                    node.config, str(output.get("message", "")), run_id
+                )
                 return  # park; resume() re-enters
 
             ctx[node.id] = output
@@ -389,6 +398,89 @@ class Engine:
         await self._mark_unreached_skipped(run_id, graph, executed)
         await self._update_run(run_id, status="succeeded", finished_at=_now_iso())
         await emit("run.finished", f"run finished: {wf.name}")
+
+    async def _notify_gate(
+        self, config: dict[str, Any], message: str, run_id: int
+    ) -> None:
+        """Gate notify hook (PHASE_7 Task 7.2): message + run link per channel."""
+        from app.notify import email as email_notify
+        from app.notify import telegram as telegram_notify
+
+        channels = config.get("notify") or []
+        text_body = f"{message}\n{self._settings.public_url}/runs/{run_id}"
+        if "telegram" in channels:
+            await telegram_notify.send(text_body)
+        if "email" in channels:
+            await email_notify.send("ATLAS approval requested", text_body)
+
+    async def expire_approvals(self) -> None:
+        """Expire pending gate approvals past their node's timeout_h.
+
+        Runs periodically from startup(); the run fails with
+        ``"approval timed out"`` per PHASE_7 Task 7.2.
+        """
+        async with get_session() as session:
+            rows = (
+                await session.execute(
+                    text(
+                        "SELECT a.id, a.run_id, a.step_id, a.requested_at, "
+                        "s.node_id, r.workflow_id "
+                        "FROM approvals a "
+                        "JOIN run_steps s ON s.id = a.step_id "
+                        "JOIN runs r ON r.id = a.run_id "
+                        "WHERE a.status='pending' AND a.kind='gate'"
+                    )
+                )
+            ).all()
+        if not rows:
+            return
+        now = datetime.now(timezone.utc)
+        for row in rows:
+            wf = await self._fetch_workflow(int(row.workflow_id))
+            graph = Graph.model_validate(json.loads(wf.graph))
+            node = next((n for n in graph.nodes if n.id == row.node_id), None)
+            timeout_h = float(node.config.get("timeout_h", 24)) if node else 24.0
+            requested = datetime.fromisoformat(row.requested_at)
+            if requested.tzinfo is None:
+                requested = requested.replace(tzinfo=timezone.utc)
+            if now < requested + timedelta(hours=timeout_h):
+                continue
+            async with get_session() as session:
+                await session.execute(
+                    text(
+                        "UPDATE approvals SET status='expired', resolved_at=:now, "
+                        "resolved_via='timeout' WHERE id=:id AND status='pending'"
+                    ),
+                    {"now": _now_iso(), "id": row.id},
+                )
+                await session.execute(
+                    text(
+                        "UPDATE run_steps SET status='failed', "
+                        "error='approval timed out', finished_at=:now WHERE id=:id"
+                    ),
+                    {"now": _now_iso(), "id": row.step_id},
+                )
+                await session.commit()
+            await append_event(
+                "approval.resolved", "engine", "approval expired (timed out)",
+                workflow_id=int(row.workflow_id), run_id=int(row.run_id),
+            )
+            await self._fail_run(
+                int(row.run_id), int(row.workflow_id), "approval timed out"
+            )
+
+    async def _expiry_loop(self) -> None:
+        while True:
+            await asyncio.sleep(60)
+            try:
+                await self.expire_approvals()
+            except Exception:  # never let the loop die on a transient error
+                pass
+
+    async def shutdown(self) -> None:
+        task = getattr(self, "_expiry_task", None)
+        if task is not None:
+            task.cancel()
 
     async def _mark_unreached_skipped(
         self, run_id: int, graph: Graph, executed: set[str]
