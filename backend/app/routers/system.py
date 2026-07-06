@@ -93,15 +93,65 @@ async def get_killswitch() -> dict[str, bool]:
 
 
 @router.post("/killswitch", dependencies=[Depends(require_session)])
-async def set_killswitch(payload: KillSwitchRequest) -> dict[str, bool]:
-    value = "1" if payload.paused else "0"
-    async with get_session() as session:
-        await session.execute(
-            text(
-                "INSERT INTO settings(key, value) VALUES ('global_pause', :value) "
-                "ON CONFLICT(key) DO UPDATE SET value = excluded.value"
-            ),
-            {"value": value},
+async def set_killswitch(
+    payload: KillSwitchRequest, request: Request
+) -> dict[str, bool]:
+    from app.events import append_event
+    from app.routers.hermes import get_hermes_admin
+
+    already = await _paused()
+    if payload.paused == already:
+        # idempotent: engaging twice / releasing twice does nothing extra
+        return {"paused": payload.paused}
+
+    admin = get_hermes_admin(request)
+
+    if payload.paused:
+        paused_ids: list[str] = []
+        try:
+            jobs = await admin.cron_jobs()
+        except HermesUnavailable as exc:
+            await append_event(
+                "hermes.error", "killswitch", f"cron list failed: {exc}"
+            )
+            jobs = []
+        for job in jobs:
+            if job.get("enabled") and isinstance(job.get("id"), str):
+                try:
+                    await admin.cron_pause(job["id"])
+                    paused_ids.append(job["id"])
+                except HermesUnavailable as exc:
+                    await append_event(
+                        "hermes.error",
+                        "killswitch",
+                        f"pause {job['id']} failed: {exc}",
+                    )
+        await _set_setting("killswitch_paused_jobs", json.dumps(paused_ids))
+        await _set_setting("global_pause", "1")
+        await append_event(
+            "system.killswitch",
+            "system",
+            f"kill switch ENGAGED ({len(paused_ids)} Hermes job(s) paused)",
         )
-        await session.commit()
+    else:
+        raw = await _setting("killswitch_paused_jobs")
+        paused_ids = json.loads(raw) if raw else []
+        resumed = 0
+        for job_id in paused_ids:
+            try:
+                await admin.cron_resume(job_id)
+                resumed += 1
+            except HermesUnavailable as exc:
+                await append_event(
+                    "hermes.error",
+                    "killswitch",
+                    f"resume {job_id} failed: {exc}",
+                )
+        await _set_setting("killswitch_paused_jobs", "[]")
+        await _set_setting("global_pause", "0")
+        await append_event(
+            "system.killswitch",
+            "system",
+            f"kill switch released ({resumed} Hermes job(s) resumed)",
+        )
     return {"paused": payload.paused}
