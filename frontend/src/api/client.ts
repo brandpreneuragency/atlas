@@ -52,6 +52,13 @@ export const api = {
       body: JSON.stringify(body),
     })
   },
+  delete<T = void>(path: string): Promise<T> {
+    return request<T>(path, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'X-Atlas-CSRF': '1' },
+    })
+  },
   postForm<T = void>(path: string, form: FormData): Promise<T> {
     return request<T>(path, {
       method: 'POST',

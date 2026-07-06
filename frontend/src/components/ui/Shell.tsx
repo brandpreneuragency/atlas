@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 
+import { KillSwitch } from './KillSwitch'
 import { Nav } from './Nav'
 
 type ShellProps = {
@@ -24,9 +25,7 @@ export function Shell({ children }: ShellProps) {
               <span className="inline-flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-emerald-400" /> Connected
               </span>
-              <button className="rounded-lg border border-slate-700 px-3 py-1 text-slate-300" type="button">
-                Kill switch
-              </button>
+              <KillSwitch />
             </div>
           </header>
           <div className="p-8">{children}</div>

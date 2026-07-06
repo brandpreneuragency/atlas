@@ -4,7 +4,10 @@ import type { RouteObject } from 'react-router-dom'
 
 import { Shell } from './components/ui/Shell'
 import { Agent } from './pages/Agent'
+import { Automation } from './pages/Automation'
 import { Files } from './pages/Files'
+import { Models } from './pages/Models'
+import { Settings } from './pages/Settings'
 import { Login } from './pages/Login'
 import { MissionControl } from './pages/MissionControl'
 import { SessionDetail } from './pages/SessionDetail'
@@ -37,7 +40,7 @@ export const routes: RouteObject[] = [
     path: '/automation',
     element: (
       <ShellPage>
-        <Placeholder title="Automation" phase="Phase 6" />
+        <Automation />
       </ShellPage>
     ),
   },
@@ -77,7 +80,7 @@ export const routes: RouteObject[] = [
     path: '/models',
     element: (
       <ShellPage>
-        <Placeholder title="Models" phase="Phase 4" />
+        <Models />
       </ShellPage>
     ),
   },
@@ -93,7 +96,7 @@ export const routes: RouteObject[] = [
     path: '/settings',
     element: (
       <ShellPage>
-        <Placeholder title="Settings" phase="Phase 8" />
+        <Settings />
       </ShellPage>
     ),
   },
