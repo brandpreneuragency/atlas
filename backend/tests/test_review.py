@@ -144,3 +144,64 @@ async def test_decide_invalid_decision_422(wf_client):
         headers=CSRF,
     )
     assert response.status_code == 422
+
+
+class ApprovalRequestingMock(RecordingMock):
+    """Emits approval.request mid-run, completes after approve_run."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        import asyncio as _asyncio
+
+        self.approved = _asyncio.Event()
+        self.approve_calls: list[tuple[str, str, str]] = []
+
+    async def approve_run(self, run_id, approval_id, decision):
+        self.approve_calls.append((run_id, approval_id, decision))
+        self.approved.set()
+
+    async def run_events(self, run_id):
+        yield {"event": "run.started", "run_id": run_id}
+        yield {
+            "event": "approval.request",
+            "run_id": run_id,
+            "approval_id": "appr-9",
+            "message": "Move files?",
+        }
+        await asyncio.wait_for(self.approved.wait(), timeout=5)
+        yield {"event": "run.completed", "run_id": run_id, "output": "moved"}
+
+
+async def test_review_run_approval_request_reaches_inbox(wf_client):
+    client, app = wf_client
+    _seed_notes(app.state.settings.atlas_root)
+    mock = ApprovalRequestingMock()
+    app.state.engine._hermes_factory = lambda: mock
+
+    response = await client.post(
+        "/api/review/2026-07-06-raw-idea.md/decide",
+        json={"decision": "approved"},
+        headers=CSRF,
+    )
+    assert response.status_code == 200
+
+    async def _poll_pending():
+        while True:
+            rows = (await client.get("/api/approvals?status=pending")).json()
+            if rows:
+                return rows
+            await asyncio.sleep(0.01)
+
+    pending = await asyncio.wait_for(_poll_pending(), timeout=5)
+    approval = pending[0]
+    assert approval["kind"] == "hermes_run"
+    assert approval["run_id"] is None  # not an engine run
+    assert "Move files?" in approval["message"]
+
+    resolve = await client.post(
+        f"/api/approvals/{approval['id']}/resolve",
+        json={"decision": "approved"},
+        headers=CSRF,
+    )
+    assert resolve.status_code == 200
+    assert mock.approve_calls == [("mock-run-1", "appr-9", "approved")]

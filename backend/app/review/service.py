@@ -87,7 +87,50 @@ async def _relay_run_events(hermes: Any, run_id: str, name: str) -> None:
                 hermes_run_id=run_id,
                 event=event,
             )
+            if kind == "approval.request":
+                await _create_approval(run_id, name, event)
     except Exception as exc:
         await append_event(
             "hermes.error", "review", f"review run relay failed: {exc}"
         )
+
+
+async def _create_approval(run_id: str, name: str, event: dict[str, Any]) -> None:
+    """Surface a Hermes approval.request in the ATLAS inbox.
+
+    Same encoding as engine hermes.task steps: ``external_ref`` is
+    ``"<hermes_run_id>|<hermes_approval_id>"`` so the approvals router can call
+    ``HermesClient.approve_run`` on resolve. run_id/step_id stay NULL — this is
+    not an engine run.
+    """
+    from datetime import datetime, timezone
+
+    from sqlalchemy import text
+
+    from app.db import get_session
+
+    message = (
+        str(event.get("message") or event.get("preview") or "")
+        or f"Review run for {name} requests approval"
+    )
+    async with get_session() as session:
+        result = await session.execute(
+            text(
+                "INSERT INTO approvals(kind, external_ref, message, status, requested_at) "
+                "VALUES ('hermes_run', :ref, :message, 'pending', :now) RETURNING id"
+            ),
+            {
+                "ref": f"{run_id}|{event.get('approval_id', '')}",
+                "message": f"{message} ({name})",
+                "now": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        approval_id = result.scalar_one()
+        await session.commit()
+    await append_event(
+        "approval.requested",
+        "review",
+        f"review run approval requested: {message}",
+        approval_id=approval_id,
+        hermes_run_id=run_id,
+    )
